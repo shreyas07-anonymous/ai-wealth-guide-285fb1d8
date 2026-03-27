@@ -7,8 +7,8 @@ const features = [
   {
     icon: TrendingUp,
     title: "Money Health Score",
-    description: "Get your financial fitness score across 8 key dimensions with AI-powered insights.",
-    path: "/score",
+    description: "Answer 15 simple questions. Get a personalized score across 11 dimensions with clear next steps.",
+    path: "/onboarding",
     color: "text-score-excellent",
     bgColor: "bg-score-excellent/10",
   },
