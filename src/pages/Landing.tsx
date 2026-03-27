@@ -15,7 +15,7 @@ const features = [
   {
     icon: Calculator,
     title: "Tax Optimizer",
-    description: "Old vs New regime comparison for FY 2025-26. Find missed deductions instantly.",
+    description: "Old vs New regime — which saves you more? Find tax deductions you're missing, in plain English.",
     path: "/tax",
     color: "text-primary",
     bgColor: "bg-primary/10",
