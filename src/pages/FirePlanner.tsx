@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
+import { useUserProfile } from "@/contexts/UserProfileContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Flame, ArrowRight, TrendingUp } from "lucide-react";
+import { Flame, ArrowLeft, TrendingUp } from "lucide-react";
 
 function formatINR(n: number) {
   if (n >= 10000000) return `₹${(n / 10000000).toFixed(2)} Cr`;
@@ -14,155 +15,142 @@ function formatINR(n: number) {
 function calculateFIRE(monthlyExpenses: number, currentAge: number, targetAge: number, currentSavings: number) {
   const annualExpenses = monthlyExpenses * 12;
   const inflationRate = 0.06;
-  const yearsToFIRE = targetAge - currentAge;
-
-  // Inflation-adjusted annual expenses at FIRE age
+  const yearsToFIRE = Math.max(1, targetAge - currentAge);
   const futureAnnualExpenses = annualExpenses * Math.pow(1 + inflationRate, yearsToFIRE);
-
-  // 25x rule
   const fireCorpus = futureAnnualExpenses * 25;
-
-  // What current savings will grow to (assume 12% equity returns)
   const equityReturn = 0.12;
   const futureValueSavings = currentSavings * Math.pow(1 + equityReturn, yearsToFIRE);
-
-  // Gap
   const corpusGap = Math.max(0, fireCorpus - futureValueSavings);
-
-  // SIP needed (monthly)
   const monthlyRate = equityReturn / 12;
   const months = yearsToFIRE * 12;
-  const sipNeeded = months > 0
-    ? corpusGap * monthlyRate / (Math.pow(1 + monthlyRate, months) - 1)
-    : 0;
+  const sipNeeded = months > 0 ? corpusGap * monthlyRate / (Math.pow(1 + monthlyRate, months) - 1) : 0;
 
-  // Step-up SIP (10% annual increase)
-  const stepUpRate = 0.10;
-  let stepUpSIP = 0;
-  // Approximate: start with lower SIP, increase 10% yearly
-  // Using formula: FV = SIP * Σ(1+g)^(k) * [(1+r)^(12*(n-k)) - 1]/r for each year
-  // Simplified approximation
-  let accumulated = 0;
-  let testSIP = sipNeeded * 0.5;
+  // Step-up SIP
+  let stepUpSIP = sipNeeded * 0.5;
   for (let iter = 0; iter < 100; iter++) {
-    accumulated = 0;
-    let currentSIP = testSIP;
+    let accumulated = 0;
+    let currentSIP = stepUpSIP;
     for (let year = 0; year < yearsToFIRE; year++) {
-      for (let month = 0; month < 12; month++) {
-        accumulated = (accumulated + currentSIP) * (1 + monthlyRate);
-      }
-      currentSIP *= (1 + stepUpRate);
+      for (let month = 0; month < 12; month++) accumulated = (accumulated + currentSIP) * (1 + monthlyRate);
+      currentSIP *= 1.10;
     }
     accumulated += futureValueSavings;
     if (Math.abs(accumulated - fireCorpus) < 1000) break;
-    testSIP *= fireCorpus / accumulated;
+    stepUpSIP *= fireCorpus / accumulated;
   }
-  stepUpSIP = Math.max(0, testSIP);
+  stepUpSIP = Math.max(0, stepUpSIP);
 
-  // Asset allocation recommendation
   const equityPercent = Math.max(30, Math.min(80, 100 - currentAge));
-  const debtPercent = 100 - equityPercent;
-
-  return {
-    fireCorpus,
-    futureAnnualExpenses,
-    futureValueSavings,
-    corpusGap,
-    sipNeeded: Math.max(0, sipNeeded),
-    stepUpSIP,
-    equityPercent,
-    debtPercent,
-    yearsToFIRE,
-  };
+  return { fireCorpus, futureAnnualExpenses, futureValueSavings, corpusGap, sipNeeded: Math.max(0, sipNeeded), stepUpSIP, equityPercent, debtPercent: 100 - equityPercent, yearsToFIRE };
 }
 
 export default function FirePlanner() {
-  const [monthlyExpenses, setMonthlyExpenses] = useState("");
-  const [currentAge, setCurrentAge] = useState("");
-  const [targetAge, setTargetAge] = useState("");
-  const [currentSavings, setCurrentSavings] = useState("");
+  const navigate = useNavigate();
+  const { profile } = useUserProfile();
+  const name = profile.firstName || "Friend";
+
+  const [monthlyExpenses, setMonthlyExpenses] = useState(profile.monthlyExpenses > 0 ? String(profile.monthlyExpenses) : "");
+  const [currentAge, setCurrentAge] = useState(profile.age > 0 ? String(profile.age) : "");
+  const [targetAge, setTargetAge] = useState(profile.retirementAge > 0 ? String(profile.retirementAge) : "45");
+  const [currentSavings, setCurrentSavings] = useState(() => {
+    const total = profile.portfolio.reduce((s, p) => s + p.amount, 0);
+    return total > 0 ? String(total) : "";
+  });
+  const [extraMonthly, setExtraMonthly] = useState(0);
   const [result, setResult] = useState<ReturnType<typeof calculateFIRE> | null>(null);
 
   const handleCalculate = () => {
-    const r = calculateFIRE(
+    setResult(calculateFIRE(
       parseFloat(monthlyExpenses) || 0,
       parseInt(currentAge) || 30,
       parseInt(targetAge) || 45,
-      parseFloat(currentSavings) || 0
-    );
-    setResult(r);
+      parseFloat(currentSavings) || 0,
+    ));
   };
 
+  const progressPercent = result ? Math.min(100, Math.round((result.futureValueSavings / result.fireCorpus) * 100)) : 0;
+  const numCurrentSavings = parseFloat(currentSavings) || 0;
+
+  // What-if calculation
+  const whatIfExtra = useMemo(() => {
+    if (!result || extraMonthly <= 0) return 0;
+    const r = 0.12 / 12;
+    const n = result.yearsToFIRE * 12;
+    return extraMonthly * ((Math.pow(1 + r, n) - 1) / r) * (1 + r);
+  }, [result, extraMonthly]);
+
   return (
-    <div className="container mx-auto px-4 py-12 max-w-3xl">
-      <div className="text-center mb-10">
+    <div className="container mx-auto px-4 py-8 max-w-3xl">
+      <Button variant="ghost" className="mb-4" onClick={() => navigate("/")}>
+        <ArrowLeft className="w-4 h-4 mr-1" /> Back
+      </Button>
+
+      <div className="text-center mb-8">
         <div className="inline-flex items-center gap-2 mb-3">
           <Flame className="w-6 h-6 text-destructive" />
-          <h1 className="font-display text-3xl font-bold">FIRE Planner</h1>
+          <h1 className="font-display text-3xl font-bold">Your Freedom Number</h1>
         </div>
-        <p className="text-muted-foreground">Financial Independence, Retire Early — Indian Edition</p>
+        <p className="text-muted-foreground">The amount you need to never HAVE to work for money again</p>
       </div>
 
       <Card className="bg-gradient-card border-border/50 mb-6">
         <CardContent className="p-6 space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <Label className="text-sm text-muted-foreground">Monthly Expenses (₹)</Label>
-              <Input
-                type="number"
-                placeholder="e.g. 50000"
-                value={monthlyExpenses}
-                onChange={(e) => setMonthlyExpenses(e.target.value)}
-                className="mt-1 bg-secondary/50 border-border/50"
-              />
+              <label className="text-sm text-muted-foreground">Monthly expenses (₹)</label>
+              <Input type="number" placeholder="e.g. 50000" value={monthlyExpenses} onChange={(e) => setMonthlyExpenses(e.target.value)} className="mt-1 bg-secondary/50 border-border/50" />
             </div>
             <div>
-              <Label className="text-sm text-muted-foreground">Current Savings (₹)</Label>
-              <Input
-                type="number"
-                placeholder="e.g. 1000000"
-                value={currentSavings}
-                onChange={(e) => setCurrentSavings(e.target.value)}
-                className="mt-1 bg-secondary/50 border-border/50"
-              />
+              <label className="text-sm text-muted-foreground">Total savings so far (₹)</label>
+              <Input type="number" placeholder="e.g. 1000000" value={currentSavings} onChange={(e) => setCurrentSavings(e.target.value)} className="mt-1 bg-secondary/50 border-border/50" />
             </div>
             <div>
-              <Label className="text-sm text-muted-foreground">Current Age</Label>
-              <Input
-                type="number"
-                placeholder="e.g. 28"
-                value={currentAge}
-                onChange={(e) => setCurrentAge(e.target.value)}
-                className="mt-1 bg-secondary/50 border-border/50"
-              />
+              <label className="text-sm text-muted-foreground">Your age</label>
+              <Input type="number" placeholder="e.g. 28" value={currentAge} onChange={(e) => setCurrentAge(e.target.value)} className="mt-1 bg-secondary/50 border-border/50" />
             </div>
             <div>
-              <Label className="text-sm text-muted-foreground">Target FIRE Age</Label>
-              <Input
-                type="number"
-                placeholder="e.g. 45"
-                value={targetAge}
-                onChange={(e) => setTargetAge(e.target.value)}
-                className="mt-1 bg-secondary/50 border-border/50"
-              />
+              <label className="text-sm text-muted-foreground">Want to be free by age</label>
+              <Input type="number" placeholder="e.g. 45" value={targetAge} onChange={(e) => setTargetAge(e.target.value)} className="mt-1 bg-secondary/50 border-border/50" />
             </div>
           </div>
-
           <Button variant="hero" className="w-full" onClick={handleCalculate}>
-            Calculate My FIRE Number <ArrowRight className="w-4 h-4 ml-1" />
+            Calculate My Freedom Number <Flame className="w-4 h-4 ml-1" />
           </Button>
         </CardContent>
       </Card>
 
       {result && (
         <div className="space-y-4">
-          {/* FIRE Corpus */}
+          {/* Freedom Number Reveal */}
           <Card className="bg-gradient-card border-border/50">
-            <CardContent className="p-6 text-center">
-              <p className="text-sm text-muted-foreground mb-1">Your FIRE Corpus Target</p>
-              <p className="font-display text-4xl font-bold text-gradient-gold">{formatINR(result.fireCorpus)}</p>
-              <p className="text-xs text-muted-foreground mt-2">
-                Based on {formatINR(result.futureAnnualExpenses)}/year inflation-adjusted expenses × 25
+            <CardContent className="p-8 text-center">
+              <p className="text-sm text-muted-foreground mb-2">To never HAVE to work again, {name}, you need:</p>
+              <p className="font-display text-5xl font-bold text-gradient-gold mb-3">{formatINR(result.fireCorpus)}</p>
+              <p className="text-sm text-muted-foreground">That's your freedom number.</p>
+            </CardContent>
+          </Card>
+
+          {/* Explainer */}
+          <Card className="bg-primary/5 border-primary/20">
+            <CardContent className="p-5">
+              <p className="text-sm text-foreground">
+                <strong>What does this mean?</strong> If you save 25× your yearly expenses, you can live off the returns forever without touching the main amount. At 4% safe withdrawal rate on {formatINR(result.fireCorpus)}, you get {formatINR(Math.round(result.fireCorpus * 0.04))}/year — enough to cover your future costs.
+              </p>
+            </CardContent>
+          </Card>
+
+          {/* Progress Bar */}
+          <Card className="bg-gradient-card border-border/50">
+            <CardContent className="p-6">
+              <div className="flex justify-between text-sm mb-2">
+                <span className="text-muted-foreground">Your progress</span>
+                <span className="font-semibold text-primary">{progressPercent}%</span>
+              </div>
+              <div className="h-4 bg-secondary rounded-full overflow-hidden mb-3">
+                <div className="h-full bg-gradient-gold rounded-full transition-all duration-700" style={{ width: `${progressPercent}%` }} />
+              </div>
+              <p className="text-sm text-muted-foreground">
+                You have {formatINR(numCurrentSavings)} saved. {progressPercent < 5 ? "Everyone starts at zero — let's build from here!" : progressPercent < 25 ? "Good start! Keep the momentum." : progressPercent < 50 ? "You're making real progress!" : "You're well on your way! 🚀"}
               </p>
             </CardContent>
           </Card>
@@ -171,79 +159,102 @@ export default function FirePlanner() {
           <div className="grid md:grid-cols-2 gap-4">
             <Card className="bg-gradient-card border-border/50">
               <CardContent className="p-6">
-                <p className="text-sm text-muted-foreground mb-1">Fixed Monthly SIP</p>
+                <p className="text-sm text-muted-foreground mb-1">Fixed monthly investment</p>
                 <p className="font-display text-2xl font-bold text-primary">{formatINR(result.sipNeeded)}</p>
-                <p className="text-xs text-muted-foreground mt-1">Same amount every month for {result.yearsToFIRE} years</p>
+                <p className="text-xs text-muted-foreground mt-2">
+                  Invest this same amount every month for {result.yearsToFIRE} years. At 12% yearly growth, it becomes {formatINR(result.corpusGap)}.
+                </p>
               </CardContent>
             </Card>
             <Card className="bg-gradient-card border-border/50">
               <CardContent className="p-6">
-                <p className="text-sm text-muted-foreground mb-1">Step-up SIP (10%/yr)</p>
+                <p className="text-sm text-muted-foreground mb-1">Start smaller, grow 10%/year</p>
                 <p className="font-display text-2xl font-bold text-teal">{formatINR(result.stepUpSIP)}</p>
-                <p className="text-xs text-muted-foreground mt-1">Start lower, increase 10% each year</p>
+                <p className="text-xs text-muted-foreground mt-2">
+                  Start at {formatINR(result.stepUpSIP)}/month, increase 10% each year as salary grows. Easier to start!
+                </p>
               </CardContent>
             </Card>
           </div>
+
+          {/* What If Calculator */}
+          <Card className="bg-gradient-card border-border/50">
+            <CardContent className="p-6">
+              <h3 className="font-display font-semibold mb-3">🤔 What if I could save a little more?</h3>
+              <div className="flex items-center gap-4 mb-3">
+                <span className="text-sm text-muted-foreground shrink-0">Extra ₹/month:</span>
+                <input type="range" min={0} max={10000} step={500} value={extraMonthly}
+                  onChange={(e) => setExtraMonthly(parseInt(e.target.value))}
+                  className="flex-1 accent-primary" />
+                <span className="text-sm font-semibold text-primary w-20 text-right">{formatINR(extraMonthly)}</span>
+              </div>
+              {extraMonthly > 0 && (
+                <Card className="bg-primary/5 border-primary/20">
+                  <CardContent className="p-3 text-sm text-foreground">
+                    Just {formatINR(extraMonthly)} more per month adds <strong className="text-primary">{formatINR(whatIfExtra)}</strong> to your freedom fund over {result.yearsToFIRE} years! That's the power of starting early.
+                  </CardContent>
+                </Card>
+              )}
+            </CardContent>
+          </Card>
 
           {/* Asset Allocation */}
           <Card className="bg-gradient-card border-border/50">
             <CardContent className="p-6">
               <h3 className="font-display font-semibold mb-4 flex items-center gap-2">
-                <TrendingUp className="w-4 h-4 text-primary" /> Recommended Asset Allocation
+                <TrendingUp className="w-4 h-4 text-primary" /> Where to invest
               </h3>
-              <div className="flex gap-1 h-8 rounded-lg overflow-hidden mb-3">
-                <div
-                  className="bg-primary flex items-center justify-center text-xs font-medium text-primary-foreground transition-all"
-                  style={{ width: `${result.equityPercent}%` }}
-                >
-                  Equity {result.equityPercent}%
+              <div className="flex gap-1 h-8 rounded-lg overflow-hidden mb-4">
+                <div className="bg-primary flex items-center justify-center text-xs font-medium text-primary-foreground" style={{ width: `${result.equityPercent}%` }}>
+                  Stocks {result.equityPercent}%
                 </div>
-                <div
-                  className="bg-teal flex items-center justify-center text-xs font-medium text-accent-foreground transition-all"
-                  style={{ width: `${result.debtPercent}%` }}
-                >
-                  Debt {result.debtPercent}%
+                <div className="bg-teal flex items-center justify-center text-xs font-medium text-accent-foreground" style={{ width: `${result.debtPercent}%` }}>
+                  Safe {result.debtPercent}%
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
-                  <p className="font-medium text-primary">Equity ({result.equityPercent}%)</p>
+                  <p className="font-medium text-primary">Stocks & Equity ({result.equityPercent}%)</p>
                   <ul className="text-muted-foreground text-xs mt-1 space-y-0.5">
-                    <li>• Nifty 50 Index Fund (40%)</li>
-                    <li>• Nifty Next 50 (20%)</li>
-                    <li>• International Fund (20%)</li>
-                    <li>• ELSS for tax saving (20%)</li>
+                    <li>• Nifty 50 Index Fund (invests in India's top 50 companies)</li>
+                    <li>• Nifty Next 50 (next biggest companies, more growth)</li>
+                    <li>• International Fund (US/global stocks for diversification)</li>
+                    <li>• ELSS (tax-saving mutual fund, 3-year lock-in)</li>
                   </ul>
                 </div>
                 <div>
-                  <p className="font-medium text-teal">Debt ({result.debtPercent}%)</p>
+                  <p className="font-medium text-teal">Safe & Stable ({result.debtPercent}%)</p>
                   <ul className="text-muted-foreground text-xs mt-1 space-y-0.5">
-                    <li>• PPF (40%)</li>
-                    <li>• NPS Tier-I (30%)</li>
-                    <li>• Debt Mutual Funds (30%)</li>
+                    <li>• PPF (government-backed, tax-free returns)</li>
+                    <li>• NPS (pension with extra tax deduction)</li>
+                    <li>• Debt Mutual Funds (low risk, better than FD)</li>
                   </ul>
                 </div>
               </div>
             </CardContent>
           </Card>
 
+          {/* Motivation */}
+          {profile.goals.length > 0 && (
+            <Card className="bg-gradient-card border-border/50">
+              <CardContent className="p-6 text-center">
+                <p className="text-sm text-muted-foreground">
+                  {name}, you said you want to {profile.goals[0]?.label?.toLowerCase() || "be financially free"}.
+                  {result.yearsToFIRE <= 20 ? ` That's ${result.yearsToFIRE} years away. ` : " "}
+                  If you start {formatINR(result.stepUpSIP)}/month today, you'll have {formatINR(result.fireCorpus)} — enough to live on your own terms. Every month you wait costs you. Start today. 💪
+                </p>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Assumptions */}
           <Card className="bg-gradient-card border-border/50">
             <CardContent className="p-6">
-              <h3 className="font-display font-semibold mb-2 text-sm">Assumptions</h3>
+              <h3 className="font-display font-semibold mb-2 text-sm">Assumptions we used</h3>
               <div className="grid grid-cols-3 gap-4 text-center text-xs text-muted-foreground">
-                <div>
-                  <p className="font-display text-lg font-bold text-foreground">12%</p>
-                  <p>Equity Returns</p>
-                </div>
-                <div>
-                  <p className="font-display text-lg font-bold text-foreground">7%</p>
-                  <p>Debt Returns</p>
-                </div>
-                <div>
-                  <p className="font-display text-lg font-bold text-foreground">6%</p>
-                  <p>Inflation Rate</p>
-                </div>
+                <div><p className="font-display text-lg font-bold text-foreground">12%</p><p>Stock market growth (long-term average)</p></div>
+                <div><p className="font-display text-lg font-bold text-foreground">7%</p><p>Safe investment returns</p></div>
+                <div><p className="font-display text-lg font-bold text-foreground">6%</p><p>Price increase rate (inflation)</p></div>
               </div>
             </CardContent>
           </Card>
