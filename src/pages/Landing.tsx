@@ -23,7 +23,7 @@ const features = [
   {
     icon: Flame,
     title: "FIRE Planner",
-    description: "Calculate your Financial Independence number and build a SIP roadmap to get there.",
+    description: "Find your 'freedom number' — how much you need to never depend on a salary again.",
     path: "/fire",
     color: "text-destructive",
     bgColor: "bg-destructive/10",
