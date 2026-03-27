@@ -141,11 +141,11 @@ export default function Landing() {
             <IndianRupee className="w-8 h-8 text-primary" />
           </div>
           <h3 className="font-display text-xl font-semibold mb-2">
-            Built on Indian Financial Laws
+            Built on Real Indian Laws
           </h3>
           <p className="text-muted-foreground text-sm max-w-lg mx-auto">
-            Every recommendation is grounded in Income Tax Act 1961, SEBI guidelines, and RBI regulations.
-            No generic advice — only actionable, legally compliant strategies with real ₹ values.
+            Our advice is grounded in Income Tax Act 1961, SEBI guidelines, and RBI regulations.
+            For big decisions (selling property, large investments), please confirm with a CA or SEBI-registered advisor. We tell you what to look into, they help you execute.
           </p>
         </div>
       </section>
