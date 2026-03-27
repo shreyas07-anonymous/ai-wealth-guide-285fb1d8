@@ -40,7 +40,7 @@ const features = [
 
 const stats = [
   { value: "₹0–5Cr+", label: "All Income Levels" },
-  { value: "8", label: "Financial Dimensions" },
+  { value: "11", label: "Financial Dimensions" },
   { value: "100%", label: "India Compliant" },
 ];
 
