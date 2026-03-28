@@ -1,10 +1,11 @@
 import { Link, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
-import { TrendingUp, Calculator, Flame, Heart, Menu, X } from "lucide-react";
+import { TrendingUp, Calculator, Flame, Heart, Menu, X, LayoutDashboard } from "lucide-react";
 import { useState } from "react";
 
 const navItems = [
   { path: "/", label: "Home", icon: null },
+  { path: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { path: "/score", label: "Health Score", icon: TrendingUp },
   { path: "/tax", label: "Tax Optimizer", icon: Calculator },
   { path: "/fire", label: "FIRE Planner", icon: Flame },
@@ -20,6 +21,9 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       <nav className="fixed top-0 left-0 right-0 z-50 glass-card border-b border-border/50">
         <div className="container mx-auto flex items-center justify-between h-16 px-4">
           <Link to="/" className="flex items-center gap-2">
+            <div className="w-6 h-6 rounded bg-[#E2621B] flex items-center justify-center">
+              <span className="text-white text-xs font-bold">ET</span>
+            </div>
             <div className="w-8 h-8 rounded-lg bg-gradient-gold flex items-center justify-center">
               <span className="text-primary-foreground font-display font-bold text-sm">₹</span>
             </div>

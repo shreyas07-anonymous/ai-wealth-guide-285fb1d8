@@ -1,12 +1,14 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useUserProfile } from "@/contexts/UserProfileContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { CheckCircle2, AlertTriangle, ArrowRight, ArrowLeft, Eye, EyeOff, Lightbulb } from "lucide-react";
-import { FinancialTerm } from "@/components/FinancialTooltip";
+import { CheckCircle2, ArrowRight, ArrowLeft, Eye, EyeOff, Lightbulb } from "lucide-react";
+import { ETTrendingTax } from "@/components/ETTrending";
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
+import MentorChat from "@/components/MentorChat";
 
 function formatINR(n: number) {
   if (n >= 10000000) return `₹${(n / 10000000).toFixed(2)} Cr`;
@@ -33,6 +35,17 @@ function calcOldRegime(income: number, deductions: { c80: number; d80: number; n
   if (taxableIncome <= 500000) tax = 0;
   const cess = tax * 0.04;
   return { taxableIncome, tax, cess, total: tax + cess, deductionsUsed: totalDeductions + standardDeduction };
+}
+
+function calcOldTaxAtDeduction(income: number, totalDed: number) {
+  const standardDeduction = 50000;
+  const taxableIncome = Math.max(0, income - totalDed - standardDeduction);
+  let tax = 0;
+  if (taxableIncome > 1000000) tax += (taxableIncome - 1000000) * 0.3;
+  if (taxableIncome > 500000) tax += Math.min(taxableIncome - 500000, 500000) * 0.2;
+  if (taxableIncome > 250000) tax += Math.min(taxableIncome - 250000, 250000) * 0.05;
+  if (taxableIncome <= 500000) tax = 0;
+  return tax + tax * 0.04;
 }
 
 function calcNewRegime(income: number) {
@@ -102,6 +115,7 @@ export default function TaxOptimizer() {
   const { profile } = useUserProfile();
   const name = profile.firstName || "Friend";
   const [simpleMode, setSimpleMode] = useState(true);
+  const [activeTab, setActiveTab] = useState<"compare" | "breakeven">("compare");
   const [income, setIncome] = useState(profile.monthlyIncome > 0 ? String(profile.monthlyIncome * 12) : "");
   const [c80, setC80] = useState(String(profile.deductions.c80 || ""));
   const [d80, setD80] = useState(String(profile.deductions.d80 || ""));
@@ -123,6 +137,23 @@ export default function TaxOptimizer() {
     setResult({ oldR, newR, savings, bestRegime, missed, income: inc, taxRate });
   };
 
+  // Break-even chart data
+  const breakEvenData = useMemo(() => {
+    if (!result) return [];
+    const inc = result.income;
+    const newTax = result.newR.total;
+    const data = [];
+    let breakEvenDed = 0;
+    for (let ded = 0; ded <= 450000; ded += 25000) {
+      const oldTax = calcOldTaxAtDeduction(inc, ded);
+      data.push({ deductions: ded, old: Math.round(oldTax), new: Math.round(newTax) });
+      if (breakEvenDed === 0 && oldTax <= newTax) breakEvenDed = ded;
+    }
+    return { data, breakEvenDed };
+  }, [result]);
+
+  const currentTotalDed = (parseFloat(c80) || 0) + (parseFloat(d80) || 0) + (parseFloat(nps) || 0) + (parseFloat(hra) || 0) + (parseFloat(homeLoan) || 0);
+
   return (
     <div className="container mx-auto px-4 py-8 max-w-3xl">
       <Button variant="ghost" className="mb-4" onClick={() => navigate("/")}>
@@ -143,30 +174,30 @@ export default function TaxOptimizer() {
         <CardContent className="p-6 space-y-4">
           <div>
             <Label className="text-sm text-muted-foreground">Your yearly income (before any tax)</Label>
-            <Input type="number" placeholder="e.g. 1200000" value={income} onChange={(e) => setIncome(e.target.value)} className="mt-1 bg-secondary/50 border-border/50" />
+            <Input type="text" inputMode="numeric" placeholder="e.g. 1200000 or 12L" value={income} onChange={(e) => setIncome(e.target.value.replace(/[^0-9.,kKlLcCrR]/g, ""))} className="mt-1 bg-secondary/50 border-border/50" />
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
               <Label className="text-sm text-muted-foreground">{simpleMode ? "Tax-saving investments" : "80C Investments"} (₹)</Label>
-              <Input type="number" placeholder="Max 1,50,000" value={c80} onChange={(e) => setC80(e.target.value)} className="mt-1 bg-secondary/50 border-border/50" />
+              <Input type="text" inputMode="numeric" placeholder="Max 1,50,000" value={c80} onChange={(e) => setC80(e.target.value.replace(/[^0-9.,kKlLcCrR]/g, ""))} className="mt-1 bg-secondary/50 border-border/50" />
               {simpleMode && <p className="text-xs text-muted-foreground mt-1">EPF, PPF, ELSS mutual funds, LIC, school fees</p>}
             </div>
             <div>
               <Label className="text-sm text-muted-foreground">{simpleMode ? "Health insurance premium" : "80D Health Insurance"} (₹)</Label>
-              <Input type="number" placeholder="Max 75,000" value={d80} onChange={(e) => setD80(e.target.value)} className="mt-1 bg-secondary/50 border-border/50" />
+              <Input type="text" inputMode="numeric" placeholder="Max 75,000" value={d80} onChange={(e) => setD80(e.target.value.replace(/[^0-9.,kKlLcCrR]/g, ""))} className="mt-1 bg-secondary/50 border-border/50" />
             </div>
             <div>
               <Label className="text-sm text-muted-foreground">{simpleMode ? "Pension plan (NPS)" : "NPS 80CCD(1B)"} (₹)</Label>
-              <Input type="number" placeholder="Max 50,000" value={nps} onChange={(e) => setNps(e.target.value)} className="mt-1 bg-secondary/50 border-border/50" />
+              <Input type="text" inputMode="numeric" placeholder="Max 50,000" value={nps} onChange={(e) => setNps(e.target.value.replace(/[^0-9.,kKlLcCrR]/g, ""))} className="mt-1 bg-secondary/50 border-border/50" />
               {simpleMode && <p className="text-xs text-muted-foreground mt-1">Extra ₹50K deduction most people miss!</p>}
             </div>
             <div>
               <Label className="text-sm text-muted-foreground">{simpleMode ? "Rent tax benefit" : "HRA Exemption"} (₹)</Label>
-              <Input type="number" placeholder="Calculated HRA" value={hra} onChange={(e) => setHra(e.target.value)} className="mt-1 bg-secondary/50 border-border/50" />
+              <Input type="text" inputMode="numeric" placeholder="Calculated HRA" value={hra} onChange={(e) => setHra(e.target.value.replace(/[^0-9.,kKlLcCrR]/g, ""))} className="mt-1 bg-secondary/50 border-border/50" />
             </div>
             <div className="col-span-2">
               <Label className="text-sm text-muted-foreground">{simpleMode ? "Home loan interest paid" : "Section 24 Home Loan Interest"} (₹)</Label>
-              <Input type="number" placeholder="Max 2,00,000" value={homeLoan} onChange={(e) => setHomeLoan(e.target.value)} className="mt-1 bg-secondary/50 border-border/50" />
+              <Input type="text" inputMode="numeric" placeholder="Max 2,00,000" value={homeLoan} onChange={(e) => setHomeLoan(e.target.value.replace(/[^0-9.,kKlLcCrR]/g, ""))} className="mt-1 bg-secondary/50 border-border/50" />
             </div>
           </div>
           <Button variant="hero" className="w-full" onClick={handleCalculate}>
@@ -177,115 +208,209 @@ export default function TaxOptimizer() {
 
       {result && (
         <>
-          {/* Tax Savings Story */}
-          <Card className="bg-primary/5 border-primary/30 mb-6">
-            <CardContent className="p-6 text-center">
-              <p className="text-sm text-foreground mb-2">
-                {name}, right now you're paying <strong>{formatINR(Math.min(result.oldR.total, result.newR.total))}</strong> in tax per year with the best option.
-              </p>
-              {result.savings > 0 && (
-                <p className="text-sm text-muted-foreground">
-                  The {result.bestRegime === "Old" ? "Option A (with deductions)" : "Option B (simpler, fewer deductions)"} saves you <strong className="text-primary">{formatINR(result.savings)}</strong> — that's enough for {taxEquivalent(result.savings)}!
-                </p>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Regime Comparison */}
-          <div className="grid md:grid-cols-2 gap-4 mb-6">
-            <Card className={`border-2 transition-colors ${result.bestRegime === "Old" ? "border-primary shadow-gold" : "border-border/50"} bg-gradient-card`}>
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-display font-semibold">{simpleMode ? "Option A — With Deductions" : "Old Regime"}</h3>
-                  {result.bestRegime === "Old" && <span className="text-xs px-2 py-1 rounded-full bg-primary/20 text-primary font-medium">🏆 Saves More</span>}
-                </div>
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between"><span className="text-muted-foreground">Taxable Income</span><span>{formatINR(result.oldR.taxableIncome)}</span></div>
-                  <div className="flex justify-between"><span className="text-muted-foreground">Deductions Used</span><span className="text-score-excellent">{formatINR(result.oldR.deductionsUsed)}</span></div>
-                  <div className="flex justify-between pt-2 border-t border-border/50 font-semibold"><span>Total Tax</span><span className="text-primary">{formatINR(result.oldR.total)}</span></div>
-                </div>
-                {simpleMode && <p className="text-xs text-muted-foreground mt-3">More work to set up, but can save more if you have investments, insurance, home loan, etc.</p>}
-              </CardContent>
-            </Card>
-
-            <Card className={`border-2 transition-colors ${result.bestRegime === "New" ? "border-primary shadow-gold" : "border-border/50"} bg-gradient-card`}>
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-display font-semibold">{simpleMode ? "Option B — Simple & Flat" : "New Regime"}</h3>
-                  {result.bestRegime === "New" && <span className="text-xs px-2 py-1 rounded-full bg-primary/20 text-primary font-medium">🏆 Saves More</span>}
-                </div>
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between"><span className="text-muted-foreground">Taxable Income</span><span>{formatINR(result.newR.taxableIncome)}</span></div>
-                  <div className="flex justify-between"><span className="text-muted-foreground">Standard Deduction</span><span className="text-score-excellent">₹75,000</span></div>
-                  <div className="flex justify-between pt-2 border-t border-border/50 font-semibold"><span>Total Tax</span><span className="text-primary">{formatINR(result.newR.total)}</span></div>
-                </div>
-                {simpleMode && <p className="text-xs text-muted-foreground mt-3">Zero paperwork. Lower rates but no extra deductions. Best if you don't invest much yet.</p>}
-              </CardContent>
-            </Card>
+          {/* Tab Bar */}
+          <div className="flex gap-1 mb-6 bg-secondary/30 rounded-xl p-1">
+            <button onClick={() => setActiveTab("compare")}
+              className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors ${activeTab === "compare" ? "bg-primary/15 text-primary" : "text-muted-foreground"}`}>
+              ⚖️ Compare
+            </button>
+            <button onClick={() => setActiveTab("breakeven")}
+              className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors ${activeTab === "breakeven" ? "bg-primary/15 text-primary" : "text-muted-foreground"}`}>
+              📊 Break-Even
+            </button>
           </div>
 
-          {/* Savings */}
-          <Card className="bg-gradient-card border-border/50 mb-6">
-            <CardContent className="p-6 text-center">
-              <p className="text-sm text-muted-foreground mb-1">You save with {simpleMode ? (result.bestRegime === "Old" ? "Option A" : "Option B") : result.bestRegime + " Regime"}</p>
-              <p className="font-display text-3xl font-bold text-gradient-gold">{formatINR(result.savings)}</p>
-              <p className="text-xs text-muted-foreground mt-1">That's {formatINR(Math.round(result.savings / 12))}/month extra</p>
-            </CardContent>
-          </Card>
+          {activeTab === "compare" && (
+            <>
+              {/* Tax Savings Story */}
+              <Card className="bg-primary/5 border-primary/30 mb-6">
+                <CardContent className="p-6 text-center">
+                  <p className="text-sm text-foreground mb-2">
+                    {name}, right now you're paying <strong>{formatINR(Math.min(result.oldR.total, result.newR.total))}</strong> in tax per year with the best option.
+                  </p>
+                  {result.savings > 0 && (
+                    <p className="text-sm text-muted-foreground">
+                      The {result.bestRegime === "Old" ? "Option A (with deductions)" : "Option B (simpler, fewer deductions)"} saves you <strong className="text-primary">{formatINR(result.savings)}</strong> — that's enough for {taxEquivalent(result.savings)}!
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
 
-          {/* Missed Deductions with Teach Me */}
-          {result.missed.length > 0 && (
+              {/* Regime Comparison */}
+              <div className="grid md:grid-cols-2 gap-4 mb-6">
+                <Card className={`border-2 transition-colors ${result.bestRegime === "Old" ? "border-primary shadow-gold" : "border-border/50"} bg-gradient-card`}>
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="font-display font-semibold">{simpleMode ? "Option A — With Deductions" : "Old Regime"}</h3>
+                      {result.bestRegime === "Old" && <span className="text-xs px-2 py-1 rounded-full bg-primary/20 text-primary font-medium">🏆 Saves More</span>}
+                    </div>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between"><span className="text-muted-foreground">Taxable Income</span><span>{formatINR(result.oldR.taxableIncome)}</span></div>
+                      <div className="flex justify-between"><span className="text-muted-foreground">Deductions Used</span><span className="text-score-excellent">{formatINR(result.oldR.deductionsUsed)}</span></div>
+                      <div className="flex justify-between pt-2 border-t border-border/50 font-semibold"><span>Total Tax</span><span className="text-primary">{formatINR(result.oldR.total)}</span></div>
+                    </div>
+                    {simpleMode && <p className="text-xs text-muted-foreground mt-3">More work to set up, but can save more if you have investments, insurance, home loan, etc.</p>}
+                  </CardContent>
+                </Card>
+
+                <Card className={`border-2 transition-colors ${result.bestRegime === "New" ? "border-primary shadow-gold" : "border-border/50"} bg-gradient-card`}>
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="font-display font-semibold">{simpleMode ? "Option B — Simple & Flat" : "New Regime"}</h3>
+                      {result.bestRegime === "New" && <span className="text-xs px-2 py-1 rounded-full bg-primary/20 text-primary font-medium">🏆 Saves More</span>}
+                    </div>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between"><span className="text-muted-foreground">Taxable Income</span><span>{formatINR(result.newR.taxableIncome)}</span></div>
+                      <div className="flex justify-between"><span className="text-muted-foreground">Standard Deduction</span><span className="text-score-excellent">₹75,000</span></div>
+                      <div className="flex justify-between pt-2 border-t border-border/50 font-semibold"><span>Total Tax</span><span className="text-primary">{formatINR(result.newR.total)}</span></div>
+                    </div>
+                    {simpleMode && <p className="text-xs text-muted-foreground mt-3">Zero paperwork. Lower rates but no extra deductions. Best if you don't invest much yet.</p>}
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Savings */}
+              <Card className="bg-gradient-card border-border/50 mb-6">
+                <CardContent className="p-6 text-center">
+                  <p className="text-sm text-muted-foreground mb-1">You save with {simpleMode ? (result.bestRegime === "Old" ? "Option A" : "Option B") : result.bestRegime + " Regime"}</p>
+                  <p className="font-display text-3xl font-bold text-gradient-gold">{formatINR(result.savings)}</p>
+                  <p className="text-xs text-muted-foreground mt-1">That's {formatINR(Math.round(result.savings / 12))}/month extra</p>
+                </CardContent>
+              </Card>
+
+              {/* Missed Deductions with Teach Me */}
+              {result.missed.length > 0 && (
+                <Card className="bg-gradient-card border-border/50 mb-6">
+                  <CardContent className="p-6">
+                    <h3 className="font-display font-semibold mb-4 flex items-center gap-2">
+                      <Lightbulb className="w-4 h-4 text-primary" /> {simpleMode ? "Tax savings you're missing" : "Missed Deductions"}
+                    </h3>
+                    <div className="space-y-4">
+                      {result.missed.map((m: MissedDeduction, i: number) => (
+                        <div key={i} className="border border-border/50 rounded-xl p-4">
+                          <div className="flex items-start justify-between mb-2">
+                            <div>
+                              <p className="text-sm font-medium">{simpleMode ? m.whatItIs.slice(0, 60) + "..." : m.techName}</p>
+                              <p className="text-sm text-primary font-semibold">Save {m.youSave}</p>
+                            </div>
+                            <button onClick={() => setTeachMe(teachMe === m.techName ? null : m.techName)}
+                              className="text-xs px-3 py-1 rounded-full border border-primary/30 text-primary hover:bg-primary/10 transition-colors shrink-0">
+                              {teachMe === m.techName ? "Close" : "Teach me"}
+                            </button>
+                          </div>
+                          {teachMe === m.techName && (
+                            <div className="mt-3 bg-secondary/30 rounded-lg p-3 space-y-2 text-xs text-muted-foreground">
+                              <p><strong className="text-foreground">What is this?</strong> {m.whatItIs}</p>
+                              <p><strong className="text-foreground">What it costs you:</strong> {m.costToYou}</p>
+                              <p><strong className="text-foreground">How long to set up:</strong> {m.timeToSetUp}</p>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Tax Saving To-Do */}
+              <Card className="bg-gradient-card border-border/50">
+                <CardContent className="p-6">
+                  <h3 className="font-display font-semibold mb-3">✅ Your tax-saving to-do list for FY 2025-26</h3>
+                  <div className="space-y-2">
+                    {result.missed.map((m: MissedDeduction, i: number) => (
+                      <div key={i} className="flex items-start gap-2 text-sm">
+                        <CheckCircle2 className="w-4 h-4 text-primary mt-0.5 shrink-0" />
+                        <span className="text-muted-foreground">Set up {m.techName} — saves {m.youSave} | ⏱ {m.timeToSetUp}</span>
+                      </div>
+                    ))}
+                    {result.missed.length === 0 && (
+                      <p className="text-sm text-muted-foreground">Great job, {name}! You're using most available deductions. 🎉</p>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            </>
+          )}
+
+          {/* Break-Even Tab */}
+          {activeTab === "breakeven" && breakEvenData && (
             <Card className="bg-gradient-card border-border/50 mb-6">
               <CardContent className="p-6">
-                <h3 className="font-display font-semibold mb-4 flex items-center gap-2">
-                  <Lightbulb className="w-4 h-4 text-primary" /> {simpleMode ? "Tax savings you're missing" : "Missed Deductions"}
-                </h3>
-                <div className="space-y-4">
-                  {result.missed.map((m: MissedDeduction, i: number) => (
-                    <div key={i} className="border border-border/50 rounded-xl p-4">
-                      <div className="flex items-start justify-between mb-2">
-                        <div>
-                          <p className="text-sm font-medium">{simpleMode ? m.whatItIs.slice(0, 60) + "..." : m.techName}</p>
-                          <p className="text-sm text-primary font-semibold">Save {m.youSave}</p>
-                        </div>
-                        <button onClick={() => setTeachMe(teachMe === m.techName ? null : m.techName)}
-                          className="text-xs px-3 py-1 rounded-full border border-primary/30 text-primary hover:bg-primary/10 transition-colors shrink-0">
-                          {teachMe === m.techName ? "Close" : "Teach me"}
-                        </button>
-                      </div>
-                      {teachMe === m.techName && (
-                        <div className="mt-3 bg-secondary/30 rounded-lg p-3 space-y-2 text-xs text-muted-foreground">
-                          <p><strong className="text-foreground">What is this?</strong> {m.whatItIs}</p>
-                          <p><strong className="text-foreground">What it costs you:</strong> {m.costToYou}</p>
-                          <p><strong className="text-foreground">How long to set up:</strong> {m.timeToSetUp}</p>
-                        </div>
+                <h3 className="font-display font-semibold mb-4">📊 At what deduction level does Old Regime win?</h3>
+                <div className="h-64 mb-4">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={(breakEvenData as any).data}>
+                      <XAxis
+                        dataKey="deductions"
+                        tickFormatter={(v) => `₹${(v / 100000).toFixed(1)}L`}
+                        stroke="hsl(215 20% 55%)"
+                        fontSize={10}
+                      />
+                      <YAxis
+                        tickFormatter={(v) => `₹${(v / 100000).toFixed(1)}L`}
+                        stroke="hsl(215 20% 55%)"
+                        fontSize={10}
+                      />
+                      <Tooltip
+                        formatter={(v: number) => formatINR(v)}
+                        labelFormatter={(v: number) => `Deductions: ${formatINR(v)}`}
+                        contentStyle={{ background: "hsl(222 41% 10%)", border: "1px solid hsl(222 30% 18%)", borderRadius: "8px", fontSize: "12px" }}
+                      />
+                      <Line type="monotone" dataKey="old" name="Old Regime" stroke="hsl(210 100% 60%)" strokeWidth={2} dot={false} />
+                      <Line type="monotone" dataKey="new" name="New Regime" stroke="hsl(142 76% 46%)" strokeWidth={2} dot={false} strokeDasharray="5 5" />
+                      {(breakEvenData as any).breakEvenDed > 0 && (
+                        <ReferenceLine
+                          x={(breakEvenData as any).breakEvenDed}
+                          stroke="hsl(43 96% 56%)"
+                          strokeDasharray="4 4"
+                          label={{ value: "📍 Break-even", fill: "hsl(43 96% 56%)", fontSize: 11, position: "top" }}
+                        />
                       )}
-                    </div>
-                  ))}
+                      <ReferenceLine
+                        x={currentTotalDed}
+                        stroke="hsl(0 72% 51%)"
+                        strokeDasharray="4 4"
+                        label={{ value: "📍 You", fill: "hsl(0 72% 51%)", fontSize: 11, position: "top" }}
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
                 </div>
+                <div className="flex items-center gap-4 text-xs text-muted-foreground mb-4">
+                  <span className="flex items-center gap-1"><span className="w-3 h-0.5 bg-blue-400 inline-block" /> Old Regime</span>
+                  <span className="flex items-center gap-1"><span className="w-3 h-0.5 bg-score-excellent inline-block" style={{ borderTop: "2px dashed" }} /> New Regime</span>
+                </div>
+
+                <Card className="bg-secondary/30 border-border/50">
+                  <CardContent className="p-4 text-sm">
+                    {(breakEvenData as any).breakEvenDed > 0 ? (
+                      <>
+                        <p className="mb-2">
+                          At <strong className="text-primary">{formatINR((breakEvenData as any).breakEvenDed)}</strong> in total deductions, both regimes are equal.
+                        </p>
+                        <p className="text-muted-foreground">
+                          You currently claim <strong>{formatINR(currentTotalDed)}</strong> → {currentTotalDed >= (breakEvenData as any).breakEvenDed ? (
+                            <span className="text-score-excellent">Stick with Old Regime. You'll save {formatINR(result.savings)}/year.</span>
+                          ) : (
+                            <span className="text-primary">New Regime is better. Consider switching by submitting Form 10-IEA.</span>
+                          )}
+                        </p>
+                      </>
+                    ) : (
+                      <p className="text-muted-foreground">
+                        At your income level, {result.bestRegime === "New" ? "the New Regime is better regardless of deductions." : "the Old Regime is better with your current deductions."}
+                      </p>
+                    )}
+                  </CardContent>
+                </Card>
               </CardContent>
             </Card>
           )}
 
-          {/* Tax Saving To-Do */}
-          <Card className="bg-gradient-card border-border/50">
-            <CardContent className="p-6">
-              <h3 className="font-display font-semibold mb-3">✅ Your tax-saving to-do list for FY 2025-26</h3>
-              <div className="space-y-2">
-                {result.missed.map((m: MissedDeduction, i: number) => (
-                  <div key={i} className="flex items-start gap-2 text-sm">
-                    <CheckCircle2 className="w-4 h-4 text-primary mt-0.5 shrink-0" />
-                    <span className="text-muted-foreground">Set up {m.techName} — saves {m.youSave} | ⏱ {m.timeToSetUp}</span>
-                  </div>
-                ))}
-                {result.missed.length === 0 && (
-                  <p className="text-sm text-muted-foreground">Great job, {name}! You're using most available deductions. 🎉</p>
-                )}
-              </div>
-            </CardContent>
-          </Card>
+          <ETTrendingTax />
         </>
       )}
+
+      <MentorChat />
     </div>
   );
 }

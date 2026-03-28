@@ -1,14 +1,14 @@
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { TrendingUp, Calculator, Flame, Heart, ArrowRight, Shield, Brain, IndianRupee } from "lucide-react";
+import { TrendingUp, Calculator, Flame, Heart, ArrowRight, Shield, Brain, IndianRupee, Zap } from "lucide-react";
 
 const features = [
   {
     icon: TrendingUp,
     title: "Money Health Score",
     description: "Answer 15 simple questions. Get a personalized score across 11 dimensions with clear next steps.",
-    path: "/onboarding",
+    path: "/privacy",
     color: "text-score-excellent",
     bgColor: "bg-score-excellent/10",
   },
@@ -55,9 +55,12 @@ export default function Landing() {
 
         <div className="container mx-auto px-4 py-24 md:py-32 relative">
           <div className="max-w-3xl mx-auto text-center space-y-6">
-            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-primary/30 bg-primary/5 text-primary text-sm font-medium">
-              <Brain className="w-4 h-4" />
-              AI-Powered Financial Intelligence
+            {/* ET Badge */}
+            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-[#E2621B]/30 bg-[#E2621B]/5 text-sm font-medium">
+              <div className="w-5 h-5 rounded bg-[#E2621B] flex items-center justify-center">
+                <span className="text-white text-xs font-bold">ET</span>
+              </div>
+              <span className="text-foreground">Powered by ET Intelligence</span>
             </div>
 
             <h1 className="font-display text-4xl md:text-6xl font-bold tracking-tight">
@@ -73,13 +76,16 @@ export default function Landing() {
 
             <div className="flex flex-col sm:flex-row gap-3 justify-center pt-4">
               <Button variant="hero" size="lg" asChild>
-                <Link to="/onboarding">
-                  Check My Financial Health
-                  <ArrowRight className="w-4 h-4 ml-1" />
+                <Link to="/quick-score">
+                  <Zap className="w-4 h-4 mr-1" />
+                  Get My Score in 60 Seconds
                 </Link>
               </Button>
               <Button variant="hero-outline" size="lg" asChild>
-                <Link to="/tax">How Much Tax Can I Save?</Link>
+                <Link to="/privacy">
+                  Full Analysis (15 questions)
+                  <ArrowRight className="w-4 h-4 ml-1" />
+                </Link>
               </Button>
             </div>
 
@@ -144,7 +150,7 @@ export default function Landing() {
             Built on Real Indian Laws
           </h3>
           <p className="text-muted-foreground text-sm max-w-lg mx-auto">
-            Our advice is grounded in Income Tax Act 1961, SEBI guidelines, and RBI regulations.
+            Our AI gives you a head start — built on Income Tax Act 1961, SEBI guidelines, and RBI regulations.
             For big decisions (selling property, large investments), please confirm with a CA or SEBI-registered advisor. We tell you what to look into, they help you execute.
           </p>
         </div>
@@ -153,8 +159,13 @@ export default function Landing() {
       {/* Footer */}
       <footer className="border-t border-border/50 py-8">
         <div className="container mx-auto px-4 text-center text-sm text-muted-foreground">
-          <p>AI Money Mentor — Smart Financial Guidance for Every Indian</p>
-          <p className="mt-1 text-xs">Not financial advice. Consult a certified financial planner for personalized decisions.</p>
+          <div className="flex items-center justify-center gap-2 mb-2">
+            <div className="w-5 h-5 rounded bg-[#E2621B] flex items-center justify-center">
+              <span className="text-white text-xs font-bold">ET</span>
+            </div>
+            <span>AI Money Mentor — Powered by ET Intelligence</span>
+          </div>
+          <p className="text-xs">Not financial advice. Consult a certified financial planner for personalized decisions.</p>
         </div>
       </footer>
     </div>

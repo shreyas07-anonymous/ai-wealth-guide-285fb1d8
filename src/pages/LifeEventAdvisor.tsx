@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Heart, CheckCircle2, AlertTriangle, FileText, ArrowRight, ArrowLeft, Clock } from "lucide-react";
+import MentorChat from "@/components/MentorChat";
 
 const lifeEvents = [
   { id: "bonus", label: "I just got a big bonus / salary hike", emoji: "💰" },
@@ -368,6 +369,8 @@ export default function LifeEventAdvisor() {
           </Card>
         </div>
       )}
+
+      <MentorChat />
     </div>
   );
 }
