@@ -6,7 +6,10 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { UserProfileProvider } from "@/contexts/UserProfileContext";
 import { AppLayout } from "@/components/AppLayout";
 import Landing from "./pages/Landing";
+import Privacy from "./pages/Privacy";
+import QuickScore from "./pages/QuickScore";
 import Onboarding from "./pages/Onboarding";
+import Dashboard from "./pages/Dashboard";
 import HealthScore from "./pages/HealthScore";
 import TaxOptimizer from "./pages/TaxOptimizer";
 import FirePlanner from "./pages/FirePlanner";
@@ -25,7 +28,10 @@ const App = () => (
           <AppLayout>
             <Routes>
               <Route path="/" element={<Landing />} />
+              <Route path="/privacy" element={<Privacy />} />
+              <Route path="/quick-score" element={<QuickScore />} />
               <Route path="/onboarding" element={<Onboarding />} />
+              <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/score" element={<HealthScore />} />
               <Route path="/tax" element={<TaxOptimizer />} />
               <Route path="/fire" element={<FirePlanner />} />
