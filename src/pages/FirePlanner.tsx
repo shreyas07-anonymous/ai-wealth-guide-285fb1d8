@@ -4,7 +4,9 @@ import { useUserProfile } from "@/contexts/UserProfileContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Flame, ArrowLeft, TrendingUp } from "lucide-react";
+import { Flame, ArrowLeft, TrendingUp, ChevronDown, ChevronUp } from "lucide-react";
+import { ETTrendingFIRE } from "@/components/ETTrending";
+import MentorChat from "@/components/MentorChat";
 
 function formatINR(n: number) {
   if (n >= 10000000) return `₹${(n / 10000000).toFixed(2)} Cr`;
@@ -12,16 +14,14 @@ function formatINR(n: number) {
   return `₹${Math.round(n).toLocaleString("en-IN")}`;
 }
 
-function calculateFIRE(monthlyExpenses: number, currentAge: number, targetAge: number, currentSavings: number) {
-  const annualExpenses = monthlyExpenses * 12;
-  const inflationRate = 0.06;
+function calculateFIRE(monthlyExpenses: number, currentAge: number, targetAge: number, currentSavings: number, inflation = 0.06, returns = 0.12, lifestyleMultiplier = 1) {
+  const annualExpenses = monthlyExpenses * 12 * lifestyleMultiplier;
   const yearsToFIRE = Math.max(1, targetAge - currentAge);
-  const futureAnnualExpenses = annualExpenses * Math.pow(1 + inflationRate, yearsToFIRE);
+  const futureAnnualExpenses = annualExpenses * Math.pow(1 + inflation, yearsToFIRE);
   const fireCorpus = futureAnnualExpenses * 25;
-  const equityReturn = 0.12;
-  const futureValueSavings = currentSavings * Math.pow(1 + equityReturn, yearsToFIRE);
+  const futureValueSavings = currentSavings * Math.pow(1 + returns, yearsToFIRE);
   const corpusGap = Math.max(0, fireCorpus - futureValueSavings);
-  const monthlyRate = equityReturn / 12;
+  const monthlyRate = returns / 12;
   const months = yearsToFIRE * 12;
   const sipNeeded = months > 0 ? corpusGap * monthlyRate / (Math.pow(1 + monthlyRate, months) - 1) : 0;
 
@@ -58,6 +58,10 @@ export default function FirePlanner() {
   });
   const [extraMonthly, setExtraMonthly] = useState(0);
   const [result, setResult] = useState<ReturnType<typeof calculateFIRE> | null>(null);
+  const [showStressTest, setShowStressTest] = useState(false);
+  const [stressInflation, setStressInflation] = useState(6);
+  const [stressReturns, setStressReturns] = useState(12);
+  const [stressLifestyle, setStressLifestyle] = useState(1);
 
   const handleCalculate = () => {
     setResult(calculateFIRE(
@@ -79,6 +83,20 @@ export default function FirePlanner() {
     return extraMonthly * ((Math.pow(1 + r, n) - 1) / r) * (1 + r);
   }, [result, extraMonthly]);
 
+  // Stress test calculation
+  const stressResult = useMemo(() => {
+    if (!result) return null;
+    return calculateFIRE(
+      parseFloat(monthlyExpenses) || 0,
+      parseInt(currentAge) || 30,
+      parseInt(targetAge) || 45,
+      parseFloat(currentSavings) || 0,
+      stressInflation / 100,
+      stressReturns / 100,
+      stressLifestyle,
+    );
+  }, [result, stressInflation, stressReturns, stressLifestyle, monthlyExpenses, currentAge, targetAge, currentSavings]);
+
   return (
     <div className="container mx-auto px-4 py-8 max-w-3xl">
       <Button variant="ghost" className="mb-4" onClick={() => navigate("/")}>
@@ -98,19 +116,19 @@ export default function FirePlanner() {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="text-sm text-muted-foreground">Monthly expenses (₹)</label>
-              <Input type="number" placeholder="e.g. 50000" value={monthlyExpenses} onChange={(e) => setMonthlyExpenses(e.target.value)} className="mt-1 bg-secondary/50 border-border/50" />
+              <Input type="text" inputMode="numeric" placeholder="e.g. 50000" value={monthlyExpenses} onChange={(e) => setMonthlyExpenses(e.target.value)} className="mt-1 bg-secondary/50 border-border/50" />
             </div>
             <div>
               <label className="text-sm text-muted-foreground">Total savings so far (₹)</label>
-              <Input type="number" placeholder="e.g. 1000000" value={currentSavings} onChange={(e) => setCurrentSavings(e.target.value)} className="mt-1 bg-secondary/50 border-border/50" />
+              <Input type="text" inputMode="numeric" placeholder="e.g. 1000000" value={currentSavings} onChange={(e) => setCurrentSavings(e.target.value)} className="mt-1 bg-secondary/50 border-border/50" />
             </div>
             <div>
               <label className="text-sm text-muted-foreground">Your age</label>
-              <Input type="number" placeholder="e.g. 28" value={currentAge} onChange={(e) => setCurrentAge(e.target.value)} className="mt-1 bg-secondary/50 border-border/50" />
+              <Input type="text" inputMode="numeric" placeholder="e.g. 28" value={currentAge} onChange={(e) => setCurrentAge(e.target.value)} className="mt-1 bg-secondary/50 border-border/50" />
             </div>
             <div>
               <label className="text-sm text-muted-foreground">Want to be free by age</label>
-              <Input type="number" placeholder="e.g. 45" value={targetAge} onChange={(e) => setTargetAge(e.target.value)} className="mt-1 bg-secondary/50 border-border/50" />
+              <Input type="text" inputMode="numeric" placeholder="e.g. 45" value={targetAge} onChange={(e) => setTargetAge(e.target.value)} className="mt-1 bg-secondary/50 border-border/50" />
             </div>
           </div>
           <Button variant="hero" className="w-full" onClick={handleCalculate}>
@@ -134,7 +152,7 @@ export default function FirePlanner() {
           <Card className="bg-primary/5 border-primary/20">
             <CardContent className="p-5">
               <p className="text-sm text-foreground">
-                <strong>What does this mean?</strong> If you save 25× your yearly expenses, you can live off the returns forever without touching the main amount. At 4% safe withdrawal rate on {formatINR(result.fireCorpus)}, you get {formatINR(Math.round(result.fireCorpus * 0.04))}/year — enough to cover your future costs.
+                <strong>What does this mean?</strong> If you save 25× your future yearly expenses (adjusted for inflation at 6%/year), you can live off the returns forever without touching the main amount. At 4% safe withdrawal rate on {formatINR(result.fireCorpus)}, you get {formatINR(Math.round(result.fireCorpus * 0.04))}/year.
               </p>
             </CardContent>
           </Card>
@@ -171,11 +189,82 @@ export default function FirePlanner() {
                 <p className="text-sm text-muted-foreground mb-1">Start smaller, grow 10%/year</p>
                 <p className="font-display text-2xl font-bold text-teal">{formatINR(result.stepUpSIP)}</p>
                 <p className="text-xs text-muted-foreground mt-2">
-                  Start at {formatINR(result.stepUpSIP)}/month, increase 10% each year as salary grows. Easier to start!
+                  Start at {formatINR(result.stepUpSIP)}/month, increase 10% each year as salary grows.
                 </p>
               </CardContent>
             </Card>
           </div>
+
+          {/* Stress Test */}
+          <Card className="bg-gradient-card border-border/50">
+            <CardContent className="p-6">
+              <button
+                onClick={() => setShowStressTest(!showStressTest)}
+                className="flex items-center justify-between w-full"
+              >
+                <h3 className="font-display font-semibold flex items-center gap-2">🔬 Stress Test Your Plan</h3>
+                {showStressTest ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
+              </button>
+
+              {showStressTest && (
+                <div className="mt-4 space-y-4">
+                  <div>
+                    <div className="flex justify-between text-sm mb-1">
+                      <span className="text-muted-foreground">Inflation Rate</span>
+                      <span className="font-semibold text-primary">{stressInflation}%</span>
+                    </div>
+                    <input type="range" min={4} max={12} step={0.5} value={stressInflation}
+                      onChange={(e) => setStressInflation(parseFloat(e.target.value))}
+                      className="w-full accent-primary" />
+                    <div className="flex justify-between text-xs text-muted-foreground"><span>4%</span><span>12%</span></div>
+                  </div>
+                  <div>
+                    <div className="flex justify-between text-sm mb-1">
+                      <span className="text-muted-foreground">Investment Returns</span>
+                      <span className="font-semibold text-primary">{stressReturns}%</span>
+                    </div>
+                    <input type="range" min={6} max={18} step={0.5} value={stressReturns}
+                      onChange={(e) => setStressReturns(parseFloat(e.target.value))}
+                      className="w-full accent-primary" />
+                    <div className="flex justify-between text-xs text-muted-foreground"><span>6%</span><span>18%</span></div>
+                  </div>
+                  <div>
+                    <div className="flex justify-between text-sm mb-1">
+                      <span className="text-muted-foreground">Lifestyle Multiplier</span>
+                      <span className="font-semibold text-primary">{stressLifestyle}x</span>
+                    </div>
+                    <input type="range" min={1} max={3} step={0.25} value={stressLifestyle}
+                      onChange={(e) => setStressLifestyle(parseFloat(e.target.value))}
+                      className="w-full accent-primary" />
+                    <div className="flex justify-between text-xs text-muted-foreground"><span>1x (same)</span><span>3x (upgrade)</span></div>
+                  </div>
+
+                  {stressResult && (
+                    <Card className="bg-secondary/30 border-border/50">
+                      <CardContent className="p-4">
+                        <div className="grid grid-cols-2 gap-3 text-sm">
+                          <div>
+                            <p className="text-muted-foreground text-xs">New FIRE Number</p>
+                            <p className="font-display font-bold text-primary">{formatINR(stressResult.fireCorpus)}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {stressResult.fireCorpus > result.fireCorpus ? `+${formatINR(stressResult.fireCorpus - result.fireCorpus)} more` : stressResult.fireCorpus < result.fireCorpus ? `${formatINR(result.fireCorpus - stressResult.fireCorpus)} less` : "Same"}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-muted-foreground text-xs">Monthly SIP Needed</p>
+                            <p className="font-display font-bold text-foreground">{formatINR(stressResult.sipNeeded)}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {stressResult.sipNeeded > result.sipNeeded ? `+${formatINR(stressResult.sipNeeded - result.sipNeeded)}/mo` : stressResult.sipNeeded < result.sipNeeded ? `-${formatINR(result.sipNeeded - stressResult.sipNeeded)}/mo` : "Same"}
+                            </p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
           {/* What If Calculator */}
           <Card className="bg-gradient-card border-border/50">
@@ -191,7 +280,7 @@ export default function FirePlanner() {
               {extraMonthly > 0 && (
                 <Card className="bg-primary/5 border-primary/20">
                   <CardContent className="p-3 text-sm text-foreground">
-                    Just {formatINR(extraMonthly)} more per month adds <strong className="text-primary">{formatINR(whatIfExtra)}</strong> to your freedom fund over {result.yearsToFIRE} years! That's the power of starting early.
+                    Just {formatINR(extraMonthly)} more per month adds <strong className="text-primary">{formatINR(whatIfExtra)}</strong> to your freedom fund over {result.yearsToFIRE} years!
                   </CardContent>
                 </Card>
               )}
@@ -216,9 +305,9 @@ export default function FirePlanner() {
                 <div>
                   <p className="font-medium text-primary">Stocks & Equity ({result.equityPercent}%)</p>
                   <ul className="text-muted-foreground text-xs mt-1 space-y-0.5">
-                    <li>• Nifty 50 Index Fund (invests in India's top 50 companies)</li>
-                    <li>• Nifty Next 50 (next biggest companies, more growth)</li>
-                    <li>• International Fund (US/global stocks for diversification)</li>
+                    <li>• Nifty 50 Index Fund (top 50 companies)</li>
+                    <li>• Nifty Next 50 (more growth potential)</li>
+                    <li>• International Fund (US/global diversification)</li>
                     <li>• ELSS (tax-saving mutual fund, 3-year lock-in)</li>
                   </ul>
                 </div>
@@ -241,7 +330,7 @@ export default function FirePlanner() {
                 <p className="text-sm text-muted-foreground">
                   {name}, you said you want to {profile.goals[0]?.label?.toLowerCase() || "be financially free"}.
                   {result.yearsToFIRE <= 20 ? ` That's ${result.yearsToFIRE} years away. ` : " "}
-                  If you start {formatINR(result.stepUpSIP)}/month today, you'll have {formatINR(result.fireCorpus)} — enough to live on your own terms. Every month you wait costs you. Start today. 💪
+                  If you start {formatINR(result.stepUpSIP)}/month today, you'll have {formatINR(result.fireCorpus)} — enough to live on your own terms. 💪
                 </p>
               </CardContent>
             </Card>
@@ -252,14 +341,18 @@ export default function FirePlanner() {
             <CardContent className="p-6">
               <h3 className="font-display font-semibold mb-2 text-sm">Assumptions we used</h3>
               <div className="grid grid-cols-3 gap-4 text-center text-xs text-muted-foreground">
-                <div><p className="font-display text-lg font-bold text-foreground">12%</p><p>Stock market growth (long-term average)</p></div>
+                <div><p className="font-display text-lg font-bold text-foreground">12%</p><p>Stock market growth</p></div>
                 <div><p className="font-display text-lg font-bold text-foreground">7%</p><p>Safe investment returns</p></div>
-                <div><p className="font-display text-lg font-bold text-foreground">6%</p><p>Price increase rate (inflation)</p></div>
+                <div><p className="font-display text-lg font-bold text-foreground">6%</p><p>Inflation rate</p></div>
               </div>
             </CardContent>
           </Card>
+
+          <ETTrendingFIRE />
         </div>
       )}
+
+      <MentorChat />
     </div>
   );
 }
