@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { CheckCircle2, ArrowLeft } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import MentorChat from "@/components/MentorChat";
 
 /* ───── scoring logic ───── */
 interface DimensionResult {
