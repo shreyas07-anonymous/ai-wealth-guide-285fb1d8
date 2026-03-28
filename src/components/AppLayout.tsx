@@ -1,10 +1,11 @@
 import { Link, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
-import { TrendingUp, Calculator, Flame, Heart, Menu, X } from "lucide-react";
+import { TrendingUp, Calculator, Flame, Heart, Menu, X, LayoutDashboard } from "lucide-react";
 import { useState } from "react";
 
 const navItems = [
   { path: "/", label: "Home", icon: null },
+  { path: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { path: "/score", label: "Health Score", icon: TrendingUp },
   { path: "/tax", label: "Tax Optimizer", icon: Calculator },
   { path: "/fire", label: "FIRE Planner", icon: Flame },
