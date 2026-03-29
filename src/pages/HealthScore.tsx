@@ -47,8 +47,8 @@ export default function HealthScore() {
   const navigate = useNavigate();
   const name = profile.firstName || "Friend";
 
-  const dimensions = useMemo(() => {
-    if (profile.monthlyIncome < 10000) return [];
+  // Early return if income not set
+  if (profile.monthlyIncome < 10000) {
     return (
       <div className="container mx-auto px-4 py-8 max-w-2xl">
         <div className="flex items-center gap-2 mb-4 text-sm text-muted-foreground">
@@ -143,7 +143,7 @@ export default function HealthScore() {
       howToGetThere: ["Max out 80C (₹1.5L) with ELSS or PPF", "Open NPS for extra ₹50K deduction", "Get health insurance to claim 80D"],
     });
 
-    // 6-10 same as before
+    // 6-10
     const hasRetPlan = profile.safetyNets.epf === "Yes" || profile.safetyNets.nps === "Yes" || profile.safetyNets.mutualFunds === "Yes";
     const retScore = hasRetPlan ? (profile.safetyNets.nps === "Yes" ? 80 : 50) : 10;
     d.push({ id: "retirement", plainEnglishLabel: "Retirement Readiness", weight: 10, targetPercent: 70, whatThisMeans: "Whether you're building enough savings to live comfortably when you stop earning.", score: retScore, yourSituation: retScore >= 70 ? "You're on track for retirement." : retScore >= 40 ? "You have basics (EPF) but need more active planning." : "You haven't started planning for retirement.", exactTarget: `Build a retirement fund of ${formatINR(monthlyExpenses * 12 * 25)} (25x annual expenses)`, howToGetThere: ["Your EPF is a start but not enough on its own", "Start NPS for extra tax benefit + retirement savings", "Add equity SIPs for long-term wealth building"] });
@@ -168,7 +168,7 @@ export default function HealthScore() {
     d.push({ id: "knowledge", plainEnglishLabel: "Financial Awareness", weight: 5, targetPercent: 60, whatThisMeans: "How familiar you are with basic financial tools.", score: Math.max(10, Math.min(100, knowScore)), yourSituation: knowScore >= 60 ? "You know the basics — let's go deeper." : "No worries if this is new — that's why we're here.", exactTarget: "Understand the 5 financial basics: emergency fund, insurance, SIP, tax deductions, EPF", howToGetThere: ["We'll explain every term in plain English", "Start with understanding SIP", "Read one financial tip per day"] });
 
     return d;
-  }, [profile]);
+  }, [profile, name]);
 
   const totalScore = useMemo(() => {
     let weighted = 0, totalWeight = 0;
