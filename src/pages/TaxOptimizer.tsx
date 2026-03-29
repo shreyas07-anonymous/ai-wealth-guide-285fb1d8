@@ -5,16 +5,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { CheckCircle2, ArrowRight, ArrowLeft, Eye, EyeOff, Lightbulb } from "lucide-react";
+import { CheckCircle2, ArrowRight, ArrowLeft, Eye, EyeOff, Lightbulb, X, Home } from "lucide-react";
 import { ETTrendingTax } from "@/components/ETTrending";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
 import MentorChat from "@/components/MentorChat";
-
-function formatINR(n: number) {
-  if (n >= 10000000) return `₹${(n / 10000000).toFixed(2)} Cr`;
-  if (n >= 100000) return `₹${(n / 100000).toFixed(2)} L`;
-  return `₹${Math.round(n).toLocaleString("en-IN")}`;
-}
+import { formatINR } from "@/components/NumberInput";
 
 function taxEquivalent(amount: number): string {
   if (amount >= 100000) return `${Math.round(amount / 25000)} international flights`;
@@ -73,6 +68,7 @@ interface MissedDeduction {
   youSave: string;
   costToYou: string;
   timeToSetUp: string;
+  maxBenefit: number;
 }
 
 function getMissedDeductions(deductions: { c80: number; d80: number; nps: number; hra: number; homeLoan: number }, taxRate: number): MissedDeduction[] {
@@ -85,6 +81,7 @@ function getMissedDeductions(deductions: { c80: number; d80: number; nps: number
       techName: "Section 80C", youSave: formatINR(save) + "/year",
       costToYou: `${formatINR(gap)} goes into investments — but you get ${formatINR(save)} back as tax savings. Net: ${formatINR(gap - save)} actually invested.`,
       timeToSetUp: "10 minutes online via Groww, Zerodha, or your bank",
+      maxBenefit: gap,
     });
   }
   if (deductions.nps < 50000) {
@@ -95,6 +92,7 @@ function getMissedDeductions(deductions: { c80: number; d80: number; nps: number
       techName: "NPS — Section 80CCD(1B)", youSave: formatINR(save) + "/year",
       costToYou: `${formatINR(gap)} goes into pension — ${formatINR(save)} back in tax. Net: ${formatINR(gap - save)} locked in pension.`,
       timeToSetUp: "10 minutes online at enps.nsdl.com",
+      maxBenefit: gap,
     });
   }
   if (deductions.d80 < 25000) {
@@ -105,6 +103,25 @@ function getMissedDeductions(deductions: { c80: number; d80: number; nps: number
       techName: "Health Insurance — Section 80D", youSave: formatINR(save) + "/year",
       costToYou: `₹15,000-25,000/year for a ₹5-10L cover. You save ${formatINR(save)} in tax — it practically pays for itself.`,
       timeToSetUp: "15 minutes via PolicyBazaar or directly from insurer website",
+      maxBenefit: gap,
+    });
+  }
+  if (deductions.hra === 0) {
+    missed.push({
+      whatItIs: "If you pay rent and get HRA in your salary, a portion is tax-deductible. This could significantly shift your break-even.",
+      techName: "HRA (House Rent Allowance)", youSave: "Varies",
+      costToYou: "No extra cost — just claim what you're already paying as rent.",
+      timeToSetUp: "Submit rent receipts to your employer",
+      maxBenefit: 0,
+    });
+  }
+  if (deductions.homeLoan < 200000 && deductions.homeLoan === 0) {
+    missed.push({
+      whatItIs: "If you took a home loan and pay EMI, the interest part of your EMI is deductible up to ₹2,00,000/year.",
+      techName: "Home Loan Interest — Section 24(b)", youSave: formatINR(Math.round(200000 * taxRate)) + "/year (max)",
+      costToYou: "No extra cost — you're already paying the interest. Just claim the deduction.",
+      timeToSetUp: "Get interest certificate from your bank",
+      maxBenefit: 200000,
     });
   }
   return missed;
@@ -124,6 +141,7 @@ export default function TaxOptimizer() {
   const [homeLoan, setHomeLoan] = useState(String(profile.deductions.homeLoanInterest || ""));
   const [result, setResult] = useState<any>(null);
   const [teachMe, setTeachMe] = useState<string | null>(null);
+  const [graphExpanded, setGraphExpanded] = useState(false);
 
   const handleCalculate = () => {
     const inc = parseFloat(income) || 0;
@@ -137,9 +155,9 @@ export default function TaxOptimizer() {
     setResult({ oldR, newR, savings, bestRegime, missed, income: inc, taxRate });
   };
 
-  // Break-even chart data
+  // Break-even data
   const breakEvenData = useMemo(() => {
-    if (!result) return [];
+    if (!result) return null;
     const inc = result.income;
     const newTax = result.newR.total;
     const data = [];
@@ -154,11 +172,64 @@ export default function TaxOptimizer() {
 
   const currentTotalDed = (parseFloat(c80) || 0) + (parseFloat(d80) || 0) + (parseFloat(nps) || 0) + (parseFloat(hra) || 0) + (parseFloat(homeLoan) || 0);
 
+  // Dynamic break-even verdict
+  const verdict = useMemo(() => {
+    if (!result || !breakEvenData) return null;
+    const beDed = (breakEvenData as any).breakEvenDed;
+    const oldSaving = result.newR.total - result.oldR.total;
+    const gap = beDed - currentTotalDed;
+
+    if (oldSaving > 0) {
+      return { color: "green" as const, emoji: "🟢", title: "You've crossed the break-even!", message: `Old Regime is saving you ${formatINR(oldSaving)} this year. Stick with it.` };
+    } else if (gap > 0 && gap <= 50000) {
+      return { color: "yellow" as const, emoji: "🟡", title: "You are close to the break-even.", message: `Adding ${formatINR(gap)} more in deductions (like NPS or 80C) will make Old Regime better for you.` };
+    } else {
+      return { color: "blue" as const, emoji: "🔵", title: "New Regime is clearly better for your income.", message: `To benefit from Old Regime, you'd need ${formatINR(Math.abs(gap))} more in deductions — which may not be realistic.` };
+    }
+  }, [result, breakEvenData, currentTotalDed]);
+
+  const verdictStyles = {
+    green: "bg-score-excellent/10 border-score-excellent/40 text-score-excellent",
+    yellow: "bg-score-fair/10 border-score-fair/40 text-score-fair",
+    blue: "bg-primary/10 border-primary/40 text-primary",
+  };
+
+  const verdictBorderStyles = {
+    green: "border-l-4 border-l-score-excellent",
+    yellow: "border-l-4 border-l-score-fair",
+    blue: "border-l-4 border-l-primary",
+  };
+
+  // Chart rendering component
+  const BreakEvenChart = () => (
+    <ResponsiveContainer width="100%" height="100%">
+      <LineChart data={(breakEvenData as any).data}>
+        <XAxis dataKey="deductions" tickFormatter={(v) => `₹${(v / 100000).toFixed(1)}L`} stroke="hsl(215 20% 55%)" fontSize={10} />
+        <YAxis tickFormatter={(v) => `₹${(v / 100000).toFixed(1)}L`} stroke="hsl(215 20% 55%)" fontSize={10} />
+        <Tooltip formatter={(v: number) => formatINR(v)} labelFormatter={(v: number) => `Deductions: ${formatINR(v)}`}
+          contentStyle={{ background: "hsl(222 41% 10%)", border: "1px solid hsl(222 30% 18%)", borderRadius: "8px", fontSize: "12px" }} />
+        <Line type="monotone" dataKey="old" name="Old Regime" stroke="hsl(210 100% 60%)" strokeWidth={2} dot={false} />
+        <Line type="monotone" dataKey="new" name="New Regime" stroke="hsl(142 76% 46%)" strokeWidth={2} dot={false} strokeDasharray="5 5" />
+        {(breakEvenData as any).breakEvenDed > 0 && (
+          <ReferenceLine x={(breakEvenData as any).breakEvenDed} stroke="hsl(43 96% 56%)" strokeDasharray="4 4"
+            label={{ value: "📍 Break-even", fill: "hsl(43 96% 56%)", fontSize: 11, position: "top" }} />
+        )}
+        <ReferenceLine x={currentTotalDed} stroke="hsl(0 72% 51%)" strokeDasharray="4 4"
+          label={{ value: "📍 You", fill: "hsl(0 72% 51%)", fontSize: 11, position: "top" }} />
+      </LineChart>
+    </ResponsiveContainer>
+  );
+
   return (
     <div className="container mx-auto px-4 py-8 max-w-3xl">
-      <Button variant="ghost" className="mb-4" onClick={() => navigate("/")}>
-        <ArrowLeft className="w-4 h-4 mr-1" /> Back
-      </Button>
+      {/* Breadcrumb */}
+      <div className="flex items-center gap-2 mb-4 text-sm text-muted-foreground">
+        <button onClick={() => navigate("/dashboard")} className="flex items-center gap-1 text-primary hover:underline font-medium">
+          <Home className="w-3.5 h-3.5" /> Dashboard
+        </button>
+        <span>/</span>
+        <span className="text-foreground font-semibold">Tax Optimizer</span>
+      </div>
 
       <div className="text-center mb-8">
         <h1 className="font-display text-3xl font-bold mb-2">Tax Optimizer</h1>
@@ -236,7 +307,7 @@ export default function TaxOptimizer() {
                 </CardContent>
               </Card>
 
-              {/* Regime Comparison */}
+              {/* Regime Comparison with Tap to Enlarge chart */}
               <div className="grid md:grid-cols-2 gap-4 mb-6">
                 <Card className={`border-2 transition-colors ${result.bestRegime === "Old" ? "border-primary shadow-gold" : "border-border/50"} bg-gradient-card`}>
                   <CardContent className="p-6">
@@ -332,82 +403,98 @@ export default function TaxOptimizer() {
             </>
           )}
 
-          {/* Break-Even Tab */}
+          {/* Break-Even Tab — DYNAMIC TEXT-BASED INSIGHTS */}
           {activeTab === "breakeven" && breakEvenData && (
-            <Card className="bg-gradient-card border-border/50 mb-6">
-              <CardContent className="p-6">
-                <h3 className="font-display font-semibold mb-4">📊 At what deduction level does Old Regime win?</h3>
-                <div className="h-64 mb-4">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={(breakEvenData as any).data}>
-                      <XAxis
-                        dataKey="deductions"
-                        tickFormatter={(v) => `₹${(v / 100000).toFixed(1)}L`}
-                        stroke="hsl(215 20% 55%)"
-                        fontSize={10}
-                      />
-                      <YAxis
-                        tickFormatter={(v) => `₹${(v / 100000).toFixed(1)}L`}
-                        stroke="hsl(215 20% 55%)"
-                        fontSize={10}
-                      />
-                      <Tooltip
-                        formatter={(v: number) => formatINR(v)}
-                        labelFormatter={(v: number) => `Deductions: ${formatINR(v)}`}
-                        contentStyle={{ background: "hsl(222 41% 10%)", border: "1px solid hsl(222 30% 18%)", borderRadius: "8px", fontSize: "12px" }}
-                      />
-                      <Line type="monotone" dataKey="old" name="Old Regime" stroke="hsl(210 100% 60%)" strokeWidth={2} dot={false} />
-                      <Line type="monotone" dataKey="new" name="New Regime" stroke="hsl(142 76% 46%)" strokeWidth={2} dot={false} strokeDasharray="5 5" />
-                      {(breakEvenData as any).breakEvenDed > 0 && (
-                        <ReferenceLine
-                          x={(breakEvenData as any).breakEvenDed}
-                          stroke="hsl(43 96% 56%)"
-                          strokeDasharray="4 4"
-                          label={{ value: "📍 Break-even", fill: "hsl(43 96% 56%)", fontSize: 11, position: "top" }}
-                        />
-                      )}
-                      <ReferenceLine
-                        x={currentTotalDed}
-                        stroke="hsl(0 72% 51%)"
-                        strokeDasharray="4 4"
-                        label={{ value: "📍 You", fill: "hsl(0 72% 51%)", fontSize: 11, position: "top" }}
-                      />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-                <div className="flex items-center gap-4 text-xs text-muted-foreground mb-4">
-                  <span className="flex items-center gap-1"><span className="w-3 h-0.5 bg-blue-400 inline-block" /> Old Regime</span>
-                  <span className="flex items-center gap-1"><span className="w-3 h-0.5 bg-score-excellent inline-block" style={{ borderTop: "2px dashed" }} /> New Regime</span>
-                </div>
-
-                <Card className="bg-secondary/30 border-border/50">
-                  <CardContent className="p-4 text-sm">
-                    {(breakEvenData as any).breakEvenDed > 0 ? (
-                      <>
-                        <p className="mb-2">
-                          At <strong className="text-primary">{formatINR((breakEvenData as any).breakEvenDed)}</strong> in total deductions, both regimes are equal.
-                        </p>
-                        <p className="text-muted-foreground">
-                          You currently claim <strong>{formatINR(currentTotalDed)}</strong> → {currentTotalDed >= (breakEvenData as any).breakEvenDed ? (
-                            <span className="text-score-excellent">Stick with Old Regime. You'll save {formatINR(result.savings)}/year.</span>
-                          ) : (
-                            <span className="text-primary">New Regime is better. Consider switching by submitting Form 10-IEA.</span>
-                          )}
-                        </p>
-                      </>
-                    ) : (
-                      <p className="text-muted-foreground">
-                        At your income level, {result.bestRegime === "New" ? "the New Regime is better regardless of deductions." : "the Old Regime is better with your current deductions."}
-                      </p>
-                    )}
+            <div className="space-y-4 mb-6">
+              {/* 3A: Verdict Banner */}
+              {verdict && (
+                <Card className={`border ${verdictStyles[verdict.color]}`}>
+                  <CardContent className="p-5">
+                    <p className="font-display font-semibold text-lg mb-1">{verdict.emoji} {verdict.title}</p>
+                    <p className="text-sm opacity-90">{verdict.message}</p>
                   </CardContent>
                 </Card>
-              </CardContent>
-            </Card>
+              )}
+
+              {/* 3B: Gap Metric Block */}
+              <Card className={`bg-card border-border/50 ${verdict ? verdictBorderStyles[verdict.color] : ""}`}>
+                <CardContent className="p-5 space-y-3">
+                  <h3 className="font-display font-semibold flex items-center gap-2">💡 The Verdict</h3>
+                  <p className="text-sm text-foreground">
+                    At your income of <strong>{formatINR(result.income)}</strong>, the <strong>{result.bestRegime} Regime</strong> is the mathematical winner.
+                  </p>
+                  <div className="text-sm text-muted-foreground space-y-2">
+                    <p><strong className="text-foreground">Why?</strong> To make the Old Regime better, you need total deductions of at least <strong className="text-primary">{formatINR((breakEvenData as any).breakEvenDed)}</strong>. You are currently at <strong>{formatINR(currentTotalDed)}</strong>.</p>
+                    {(breakEvenData as any).breakEvenDed > currentTotalDed ? (
+                      <p><strong className="text-foreground">How to switch the lead:</strong> If you invest an additional <strong className="text-primary">{formatINR((breakEvenData as any).breakEvenDed - currentTotalDed)}</strong> in tax-saving instruments, the Old Regime will start saving you money.</p>
+                    ) : (
+                      <p className="text-score-excellent font-medium">✅ You have already crossed the break-even. Your current deductions are working in your favour.</p>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* 3C: Missing Deductions Checklist */}
+              <Card className="bg-card border-border/50">
+                <CardContent className="p-5">
+                  <h3 className="font-display font-semibold mb-3">Deductions You Haven't Added Yet</h3>
+                  {result.missed.length > 0 ? (
+                    <div className="space-y-3">
+                      {result.missed.map((m: MissedDeduction, i: number) => (
+                        <div key={i} className="flex items-start gap-3 text-sm">
+                          <div className="w-5 h-5 rounded-full border-2 border-score-fair/50 shrink-0 mt-0.5" />
+                          <div>
+                            <p className="font-medium text-foreground">{m.techName}</p>
+                            <p className="text-xs text-muted-foreground">{m.whatItIs.slice(0, 80)}...</p>
+                            {m.maxBenefit > 0 && <p className="text-xs text-primary mt-0.5">→ Potential saving: {m.youSave}</p>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-score-excellent">✅ You've claimed all major deductions. Your plan looks optimized.</p>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Chart with Tap to Enlarge */}
+              <Card className="bg-gradient-card border-border/50">
+                <CardContent className="p-6">
+                  <h3 className="font-display font-semibold mb-4">📊 Visual: Old vs New Regime at different deduction levels</h3>
+                  <div className="h-64 mb-4 cursor-pointer relative" onClick={() => setGraphExpanded(true)}>
+                    <BreakEvenChart />
+                    <div className="absolute bottom-2 right-2 bg-background/70 text-foreground text-xs px-2 py-1 rounded-full border border-border/50">
+                      🔍 Tap to enlarge
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                    <span className="flex items-center gap-1"><span className="w-3 h-0.5 bg-blue-400 inline-block" /> Old Regime</span>
+                    <span className="flex items-center gap-1"><span className="w-3 h-0.5 bg-score-excellent inline-block" style={{ borderTop: "2px dashed" }} /> New Regime</span>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
           )}
 
           <ETTrendingTax />
         </>
+      )}
+
+      {/* Fullscreen graph overlay */}
+      {graphExpanded && breakEvenData && (
+        <div className="fixed inset-0 z-50 bg-background/90 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setGraphExpanded(false)}>
+          <div className="bg-card rounded-2xl p-6 w-full max-w-3xl max-h-[90vh] overflow-auto border border-border/50" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="font-display font-bold text-foreground">Tax Comparison — Break-Even Chart</h3>
+              <button onClick={() => setGraphExpanded(false)} className="text-muted-foreground hover:text-foreground">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="h-96">
+              <BreakEvenChart />
+            </div>
+          </div>
+        </div>
       )}
 
       <MentorChat />

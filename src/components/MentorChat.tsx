@@ -2,12 +2,7 @@ import { useState } from "react";
 import { useUserProfile } from "@/contexts/UserProfileContext";
 import { MessageCircle, X, Send } from "lucide-react";
 import { Card } from "@/components/ui/card";
-
-function formatINR(n: number) {
-  if (n >= 10000000) return `₹${(n / 10000000).toFixed(1)} Cr`;
-  if (n >= 100000) return `₹${(n / 100000).toFixed(1)} L`;
-  return `₹${Math.round(n).toLocaleString("en-IN")}`;
-}
+import { formatINR } from "@/components/NumberInput";
 
 function buildMentorContext(profile: ReturnType<typeof useUserProfile>["profile"]) {
   const insights: string[] = [];
@@ -16,7 +11,6 @@ function buildMentorContext(profile: ReturnType<typeof useUserProfile>["profile"
   const savingsRate = profile.monthlyIncome > 0
     ? Math.round(((profile.monthlyIncome - profile.monthlyExpenses) / profile.monthlyIncome) * 100) : 0;
 
-  // Anomalies & opportunities
   const totalDed = profile.deductions.c80 + profile.deductions.d80 + profile.deductions.nps;
   const maxDed = 150000 + 75000 + 50000;
   if (totalDed < maxDed * 0.5) {
@@ -47,7 +41,6 @@ function buildMentorContext(profile: ReturnType<typeof useUserProfile>["profile"
     chips.push("What is NPS and should I get it?");
   }
 
-  // Ensure at least 3 chips
   if (chips.length < 3) chips.push("What should I do first?");
   if (chips.length < 3) chips.push("Am I on track for retirement?");
 
@@ -78,7 +71,6 @@ export default function MentorChat() {
     setInput("");
     setLoading(true);
 
-    // Simulate AI response (since we don't have a backend)
     setTimeout(() => {
       const responses: Record<string, string> = {
         "How do I save more tax?": `Great question, ${profile.firstName}! Here are the top 3 things you can do:\n\n1. **Max out 80C** (₹1.5L) — ELSS mutual funds are the best option. Lock-in is just 3 years and returns average 12-15%.\n2. **Start NPS** — extra ₹50K deduction. At 30% tax bracket, that's ₹15,600 saved.\n3. **Get health insurance** (80D) — ₹25K deduction for self, ₹50K for parents above 60.\n\n**Do this today:** Open a Groww or Zerodha account and start a ₹5,000/month ELSS SIP. Takes 10 minutes.`,
@@ -126,12 +118,10 @@ export default function MentorChat() {
 
         {/* Messages */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-[200px]">
-          {/* Initial context message */}
           <div className="bg-secondary/50 rounded-xl p-3 text-sm text-foreground whitespace-pre-line">
             {contextMsg}
           </div>
 
-          {/* Quick reply chips */}
           {messages.length === 0 && (
             <div className="flex flex-wrap gap-2">
               {chips.map((chip) => (
@@ -152,9 +142,15 @@ export default function MentorChat() {
             </div>
           ))}
 
+          {/* Typing indicator */}
           {loading && (
-            <div className="bg-secondary/50 rounded-xl p-3 text-sm text-muted-foreground">
-              Thinking...
+            <div className="flex items-center gap-2 py-2 px-4">
+              <div className="flex gap-1">
+                <span className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
+                <span className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
+                <span className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+              </div>
+              <span className="text-xs text-muted-foreground">AI Mentor is thinking...</span>
             </div>
           )}
         </div>

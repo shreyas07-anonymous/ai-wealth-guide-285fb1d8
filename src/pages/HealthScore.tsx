@@ -2,9 +2,10 @@ import { useState, useMemo } from "react";
 import { useUserProfile } from "@/contexts/UserProfileContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { CheckCircle2, ArrowLeft } from "lucide-react";
+import { CheckCircle2, ArrowLeft, Home } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import MentorChat from "@/components/MentorChat";
+import { formatINR } from "@/components/NumberInput";
 
 /* ───── scoring logic ───── */
 interface DimensionResult {
@@ -16,12 +17,7 @@ interface DimensionResult {
   yourSituation: string;
   exactTarget: string;
   howToGetThere: string[];
-}
-
-function formatINR(n: number) {
-  if (n >= 10000000) return `₹${(n / 10000000).toFixed(1)} Cr`;
-  if (n >= 100000) return `₹${(n / 100000).toFixed(1)} L`;
-  return `₹${Math.round(n).toLocaleString("en-IN")}`;
+  targetPercent: number;
 }
 
 function getGrade(score: number) {
@@ -52,6 +48,28 @@ export default function HealthScore() {
   const name = profile.firstName || "Friend";
 
   const dimensions = useMemo(() => {
+    if (profile.monthlyIncome < 10000) return [];
+    return (
+      <div className="container mx-auto px-4 py-8 max-w-2xl">
+        <div className="flex items-center gap-2 mb-4 text-sm text-muted-foreground">
+          <button onClick={() => navigate("/dashboard")} className="flex items-center gap-1 text-primary hover:underline font-medium">
+            <Home className="w-3.5 h-3.5" /> Dashboard
+          </button>
+          <span>/</span>
+          <span className="text-foreground font-semibold">Health Score</span>
+        </div>
+        <Card className="bg-score-fair/5 border-score-fair/30">
+          <CardContent className="p-6">
+            <p className="font-display font-semibold text-lg mb-2">Looks like you might have missed this!</p>
+            <p className="text-sm text-muted-foreground">Please enter your monthly take-home pay to get accurate results. Not sure? Check your last bank credit SMS — it usually says the amount credited.</p>
+            <Button variant="hero" className="mt-4" onClick={() => navigate("/onboarding")}>Complete Onboarding</Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  const dimensions = useMemo(() => {
     const d: DimensionResult[] = [];
     const monthlyIncome = profile.monthlyIncome;
     const monthlyExpenses = profile.monthlyExpenses;
@@ -61,7 +79,7 @@ export default function HealthScore() {
     const emMap: Record<string, number> = { "None": 0, "1-2 months": 30, "3-5 months": 70, "6+ months": 100 };
     const emScore = emMap[profile.safetyNets.emergencyMonths] ?? 0;
     d.push({
-      id: "emergency", plainEnglishLabel: "Emergency Savings Buffer", weight: 15,
+      id: "emergency", plainEnglishLabel: "Emergency Savings Buffer", weight: 15, targetPercent: 70,
       whatThisMeans: "Money kept aside for sudden job loss, medical crisis, or unexpected expenses.",
       score: emScore,
       yourSituation: emScore >= 70 ? `You have a solid emergency buffer. Great job, ${name}!` : emScore > 0 ? "You've started, but your safety net isn't thick enough yet." : "You have no emergency savings — this is your #1 priority.",
@@ -73,10 +91,9 @@ export default function HealthScore() {
     let insScore = 0;
     if (profile.safetyNets.healthInsurance === "Yes" || profile.safetyNets.healthInsurance === "Employer covers me") insScore += 40;
     if (profile.safetyNets.termInsurance === "Yes") insScore += 60;
-    else if (profile.safetyNets.termInsurance === "No") insScore += 0;
     d.push({
-      id: "insurance", plainEnglishLabel: "Protection Coverage", weight: 20,
-      whatThisMeans: "Insurance that protects your family's finances if something bad happens — hospital bills or worse.",
+      id: "insurance", plainEnglishLabel: "Protection Coverage", weight: 20, targetPercent: 70,
+      whatThisMeans: "Insurance that protects your family's finances if something bad happens.",
       score: Math.min(100, insScore),
       yourSituation: insScore >= 80 ? "You're well protected." : insScore >= 40 ? "You have some coverage but gaps remain." : "You're financially exposed — one bad event could wipe out your savings.",
       exactTarget: `₹1 Cr term insurance + ₹10L+ health cover`,
@@ -87,12 +104,12 @@ export default function HealthScore() {
     const behMap: Record<string, number> = { spender: 5, saver: 20, fd_rd: 35, sip: 65, active: 85, clueless: 10 };
     const invScore = behMap[profile.currentBehavior] ?? 20;
     d.push({
-      id: "investments", plainEnglishLabel: "Investment Health", weight: 20,
+      id: "investments", plainEnglishLabel: "Investment Health", weight: 20, targetPercent: 70,
       whatThisMeans: "How well your money is growing beyond a savings account — beating inflation over time.",
       score: invScore,
       yourSituation: invScore >= 65 ? "You're investing — now let's check if it's optimized." : invScore >= 35 ? "FDs are safe but barely beat inflation. Time to explore mutual funds." : "Your money is sitting idle and losing value to inflation every day.",
       exactTarget: `Invest at least ${formatINR(Math.round(monthlyIncome * 0.2))}/month (20% of income)`,
-      howToGetThere: ["Start a ₹500/month SIP (monthly investment) in a Nifty 50 index fund", "Use apps like Groww, Zerodha Coin, or Kuvera — takes 10 minutes to set up", "Increase SIP by 10% every year when salary grows"],
+      howToGetThere: ["Start a ₹500/month SIP in a Nifty 50 index fund", "Use apps like Groww, Zerodha Coin, or Kuvera — takes 10 minutes", "Increase SIP by 10% every year when salary grows"],
     });
 
     // 4. Debt Management (15%)
@@ -105,7 +122,7 @@ export default function HealthScore() {
     else if (emiRatio > 10) debtScore = 70;
     if (!profile.loans.types.length) debtScore = 100;
     d.push({
-      id: "debt", plainEnglishLabel: "Debt & Loan Health", weight: 15,
+      id: "debt", plainEnglishLabel: "Debt & Loan Health", weight: 15, targetPercent: 70,
       whatThisMeans: "How much of your income goes toward loan repayments — and whether any loans are hurting you.",
       score: Math.max(0, debtScore),
       yourSituation: debtScore >= 80 ? "Your debt is under control." : debtScore >= 50 ? `${Math.round(emiRatio)}% of income goes to EMIs — manageable but watch it.` : `${Math.round(emiRatio)}% of income goes to EMIs — this is too high.`,
@@ -118,76 +135,37 @@ export default function HealthScore() {
     const maxPossible = 150000 + 50000 + 75000 + 200000;
     const taxScore = Math.min(100, Math.round((totalDed / maxPossible) * 100));
     d.push({
-      id: "tax", plainEnglishLabel: "Tax Savings", weight: 15,
+      id: "tax", plainEnglishLabel: "Tax Savings", weight: 15, targetPercent: 70,
       whatThisMeans: "How well you're using legal tax deductions to keep more money in your pocket.",
       score: taxScore,
-      yourSituation: taxScore >= 70 ? "You're using most available deductions — check if you can squeeze out more." : taxScore >= 30 ? "You're leaving tax savings on the table." : "You're likely paying lakhs more in tax than needed.",
+      yourSituation: taxScore >= 70 ? "You're using most available deductions." : taxScore >= 30 ? "You're leaving tax savings on the table." : "You're likely paying lakhs more in tax than needed.",
       exactTarget: `Maximize deductions to save up to ${formatINR(Math.round(maxPossible * 0.3))} in tax`,
       howToGetThere: ["Max out 80C (₹1.5L) with ELSS or PPF", "Open NPS for extra ₹50K deduction", "Get health insurance to claim 80D"],
     });
 
-    // 6. Retirement Planning (10%)
+    // 6-10 same as before
     const hasRetPlan = profile.safetyNets.epf === "Yes" || profile.safetyNets.nps === "Yes" || profile.safetyNets.mutualFunds === "Yes";
     const retScore = hasRetPlan ? (profile.safetyNets.nps === "Yes" ? 80 : 50) : 10;
-    d.push({
-      id: "retirement", plainEnglishLabel: "Retirement Readiness", weight: 10,
-      whatThisMeans: "Whether you're building enough savings to live comfortably when you stop earning.",
-      score: retScore,
-      yourSituation: retScore >= 70 ? "You're on track for retirement." : retScore >= 40 ? "You have basics (EPF) but need more active planning." : "You haven't started planning for retirement — every year of delay costs you lakhs.",
-      exactTarget: `Build a retirement fund of ${formatINR(monthlyExpenses * 12 * 25)} (25x annual expenses)`,
-      howToGetThere: ["Your EPF is a start but not enough on its own", "Start NPS for extra tax benefit + retirement savings", "Add equity SIPs for long-term wealth building"],
-    });
+    d.push({ id: "retirement", plainEnglishLabel: "Retirement Readiness", weight: 10, targetPercent: 70, whatThisMeans: "Whether you're building enough savings to live comfortably when you stop earning.", score: retScore, yourSituation: retScore >= 70 ? "You're on track for retirement." : retScore >= 40 ? "You have basics (EPF) but need more active planning." : "You haven't started planning for retirement.", exactTarget: `Build a retirement fund of ${formatINR(monthlyExpenses * 12 * 25)} (25x annual expenses)`, howToGetThere: ["Your EPF is a start but not enough on its own", "Start NPS for extra tax benefit + retirement savings", "Add equity SIPs for long-term wealth building"] });
 
-    // 7. Income Diversification (5%)
     const incDivScore = profile.employmentType === "freelancer" || profile.employmentType === "business" ? 70 : 20;
-    d.push({
-      id: "income_div", plainEnglishLabel: "Income Sources", weight: 5,
-      whatThisMeans: "How many ways you earn money — more sources = more financial security.",
-      score: incDivScore,
-      yourSituation: incDivScore >= 60 ? "You have multiple income streams — great for security." : "You depend on a single salary — risky if that stops.",
-      exactTarget: "Build at least one additional income source",
-      howToGetThere: ["Explore freelancing in your skill area", "Consider rental income or dividend-paying investments", "Start a small side project or content creation"],
-    });
+    d.push({ id: "income_div", plainEnglishLabel: "Income Sources", weight: 5, targetPercent: 50, whatThisMeans: "How many ways you earn money — more sources = more financial security.", score: incDivScore, yourSituation: incDivScore >= 60 ? "You have multiple income streams." : "You depend on a single salary — risky if that stops.", exactTarget: "Build at least one additional income source", howToGetThere: ["Explore freelancing in your skill area", "Consider rental income or dividend-paying investments", "Start a small side project"] });
 
-    // 8. Spending Habits (5%)
     const spendScore = profile.savingsRate >= 30 ? 90 : profile.savingsRate >= 20 ? 70 : profile.savingsRate >= 10 ? 40 : 15;
     const adjustedSpend = profile.currentBehavior === "clueless" ? Math.max(0, spendScore - 20) : spendScore;
-    d.push({
-      id: "spending", plainEnglishLabel: "Spending Habits", weight: 5,
-      whatThisMeans: "How much of your income you save vs spend — and whether you track where your money goes.",
-      score: adjustedSpend,
-      yourSituation: adjustedSpend >= 70 ? `You save ${profile.savingsRate}% of income — that's solid!` : adjustedSpend >= 40 ? `You save ${profile.savingsRate}% — try to get this above 20%.` : "You're spending almost everything you earn.",
-      exactTarget: "Save at least 20% of take-home income every month",
-      howToGetThere: ["Track spending for 1 month — you'll find ₹3,000-8,000 in surprise expenses", "Set up auto-transfer to savings on salary day", "Cut 1-2 subscriptions you don't actively use"],
-    });
+    d.push({ id: "spending", plainEnglishLabel: "Spending Habits", weight: 5, targetPercent: 70, whatThisMeans: "How much of your income you save vs spend.", score: adjustedSpend, yourSituation: adjustedSpend >= 70 ? `You save ${profile.savingsRate}% of income — solid!` : adjustedSpend >= 40 ? `You save ${profile.savingsRate}% — try to get above 20%.` : "You're spending almost everything you earn.", exactTarget: "Save at least 20% of take-home income every month", howToGetThere: ["Track spending for 1 month", "Set up auto-transfer to savings on salary day", "Cut 1-2 subscriptions you don't actively use"] });
 
-    // 9. Goal Alignment (5%)
     const hasGoalSavings = profile.safetyNets.mutualFunds === "Yes" && profile.goals.length > 0;
     const goalScore = hasGoalSavings ? 70 : profile.goals.length > 0 ? 30 : 10;
-    d.push({
-      id: "goals", plainEnglishLabel: "Goal Alignment", weight: 5,
-      whatThisMeans: "Whether your investments are actually aimed at your life goals, or just random.",
-      score: goalScore,
-      yourSituation: goalScore >= 60 ? "Your goals and investments are reasonably aligned." : goalScore >= 30 ? "You have goals but no dedicated savings for them." : "Set clear financial goals — it makes saving 2x more effective.",
-      exactTarget: "Create one SIP per major life goal",
-      howToGetThere: ["Pick your top goal and calculate how much it costs", "Start a dedicated SIP just for that goal", "Review goal progress every 6 months"],
-    });
+    d.push({ id: "goals", plainEnglishLabel: "Goal Alignment", weight: 5, targetPercent: 60, whatThisMeans: "Whether your investments are aimed at your life goals.", score: goalScore, yourSituation: goalScore >= 60 ? "Your goals and investments are reasonably aligned." : goalScore >= 30 ? "You have goals but no dedicated savings." : "Set clear financial goals.", exactTarget: "Create one SIP per major life goal", howToGetThere: ["Pick your top goal and calculate how much it costs", "Start a dedicated SIP just for that goal", "Review goal progress every 6 months"] });
 
-    // 10. Knowledge & Awareness (5%)
     let knowScore = 50;
     if (profile.safetyNets.nps === "Never heard of it") knowScore -= 15;
     if (profile.safetyNets.termInsurance === "Not sure what this is") knowScore -= 15;
     if (profile.currentBehavior === "active") knowScore += 30;
     if (profile.currentBehavior === "sip") knowScore += 15;
     if (profile.deductions.unknowns.length > 2) knowScore -= 10;
-    d.push({
-      id: "knowledge", plainEnglishLabel: "Financial Awareness", weight: 5,
-      whatThisMeans: "How familiar you are with basic financial tools and concepts — not a test, just helps us adjust our advice.",
-      score: Math.max(10, Math.min(100, knowScore)),
-      yourSituation: knowScore >= 60 ? "You know the basics — let's go deeper." : "No worries if this is new — that's exactly why we're here.",
-      exactTarget: "Understand the 5 financial basics: emergency fund, insurance, SIP, tax deductions, EPF",
-      howToGetThere: ["We'll explain every term in plain English as we go", "Start with understanding SIP — it's the single most powerful tool", "Read one financial tip per day — we'll show them to you"],
-    });
+    d.push({ id: "knowledge", plainEnglishLabel: "Financial Awareness", weight: 5, targetPercent: 60, whatThisMeans: "How familiar you are with basic financial tools.", score: Math.max(10, Math.min(100, knowScore)), yourSituation: knowScore >= 60 ? "You know the basics — let's go deeper." : "No worries if this is new — that's why we're here.", exactTarget: "Understand the 5 financial basics: emergency fund, insurance, SIP, tax deductions, EPF", howToGetThere: ["We'll explain every term in plain English", "Start with understanding SIP", "Read one financial tip per day"] });
 
     return d;
   }, [profile]);
@@ -202,7 +180,6 @@ export default function HealthScore() {
   const circumference = 2 * Math.PI * 45;
   const offset = circumference - (totalScore / 100) * circumference;
 
-  // Insights
   const weakest = [...dimensions].sort((a, b) => a.score - b.score).slice(0, 3);
   const strongest = [...dimensions].sort((a, b) => b.score - a.score).slice(0, 2);
 
@@ -210,13 +187,28 @@ export default function HealthScore() {
   const oneThingThisMonth = weakest[0]?.howToGetThere[1] || weakest[1]?.howToGetThere[0] || "Set up one SIP.";
   const oneThingThisYear = weakest[0]?.howToGetThere[2] || weakest[1]?.howToGetThere[1] || "Build 6 months emergency fund.";
 
+  // Recommended Next Step
+  const dimensionScores: Record<string, { score: number; label: string; screen: string; emoji: string }> = {
+    tax: { score: dimensions.find(d => d.id === "tax")?.score || 0, label: "Optimize My Taxes", screen: "/tax", emoji: "🧾" },
+    insurance: { score: dimensions.find(d => d.id === "insurance")?.score || 0, label: "Get Protected", screen: "/life-event", emoji: "🛡️" },
+    emergency: { score: dimensions.find(d => d.id === "emergency")?.score || 0, label: "Build Safety Net", screen: "/fire", emoji: "🚨" },
+    investments: { score: dimensions.find(d => d.id === "investments")?.score || 0, label: "Start Investing", screen: "/fire", emoji: "📈" },
+  };
+  const lowestDim = Object.entries(dimensionScores).sort((a, b) => a[1].score - b[1].score)[0];
+  const recommendedCTA = lowestDim[1];
+  const otherCTAs = Object.entries(dimensionScores).filter(([k]) => k !== lowestDim[0]).map(([, v]) => v);
+
   return (
     <div className="container mx-auto px-4 py-8 max-w-2xl">
-      <Button variant="ghost" className="mb-4" onClick={() => navigate("/")}>
-        <ArrowLeft className="w-4 h-4 mr-1" /> Back
-      </Button>
+      {/* Breadcrumb */}
+      <div className="flex items-center gap-2 mb-4 text-sm text-muted-foreground">
+        <button onClick={() => navigate("/dashboard")} className="flex items-center gap-1 text-primary hover:underline font-medium">
+          <Home className="w-3.5 h-3.5" /> Dashboard
+        </button>
+        <span>/</span>
+        <span className="text-foreground font-semibold">Health Score</span>
+      </div>
 
-      {/* Personalized greeting */}
       <div className="text-center mb-8">
         <h1 className="font-display text-3xl font-bold mb-2">{name}, here's your financial health report</h1>
         <p className="text-muted-foreground">Scored across {dimensions.length} dimensions of financial wellness</p>
@@ -240,6 +232,30 @@ export default function HealthScore() {
           <div className={`font-display text-2xl font-bold ${color}`}>Grade {grade} — {label}</div>
         </CardContent>
       </Card>
+
+      {/* Recommended Next Step CTA */}
+      <Card className="bg-gradient-gold border-none mb-4">
+        <CardContent className="p-5">
+          <p className="text-primary-foreground text-xs font-semibold mb-1">⭐ RECOMMENDED NEXT STEP</p>
+          <p className="text-primary-foreground text-sm mb-3">
+            Your {lowestDim[0].charAt(0).toUpperCase() + lowestDim[0].slice(1)} score needs attention. This is where you'll gain the most.
+          </p>
+          <button onClick={() => navigate(recommendedCTA.screen)}
+            className="bg-card text-primary font-bold px-6 py-2 rounded-xl w-full text-sm">
+            {recommendedCTA.emoji} {recommendedCTA.label}
+          </button>
+        </CardContent>
+      </Card>
+
+      {/* Other CTAs */}
+      <div className="space-y-2 mb-6">
+        {otherCTAs.map((cta) => (
+          <button key={cta.screen + cta.label} onClick={() => navigate(cta.screen)}
+            className="w-full border border-border/50 rounded-xl px-4 py-3 text-sm text-muted-foreground font-medium text-left hover:bg-secondary/30 transition-colors">
+            {cta.emoji} {cta.label}
+          </button>
+        ))}
+      </div>
 
       {/* Key Strengths */}
       <Card className="bg-gradient-card border-border/50 mb-4">
@@ -284,9 +300,9 @@ export default function HealthScore() {
         </CardContent>
       </Card>
 
-      {/* Dimension Breakdown */}
+      {/* Dimension Breakdown with Target Markers */}
       <Card className="bg-gradient-card border-border/50 mb-4">
-        <CardContent className="p-6 space-y-4">
+        <CardContent className="p-6 space-y-5">
           <h3 className="font-display font-semibold">📊 Full breakdown</h3>
           {dimensions.map((d) => (
             <div key={d.id}>
@@ -294,8 +310,11 @@ export default function HealthScore() {
                 <span className="text-foreground font-medium">{d.plainEnglishLabel}</span>
                 <span className={`font-medium ${d.score >= 70 ? "text-score-excellent" : d.score >= 50 ? "text-score-fair" : "text-score-poor"}`}>{d.score}%</span>
               </div>
-              <div className="h-2 bg-secondary rounded-full overflow-hidden mb-1">
+              <div className="relative w-full h-3 bg-secondary rounded-full overflow-visible mb-3">
                 <div className={`h-full rounded-full transition-all duration-700 ${getBarColor(d.score)}`} style={{ width: `${d.score}%` }} />
+                {/* Target marker */}
+                <div className="absolute top-[-3px] bottom-[-3px] w-0.5 bg-foreground/40 rounded-full" style={{ left: `${d.targetPercent}%` }} title={`Target: ${d.targetPercent}%`} />
+                <div className="absolute top-4 text-[9px] text-muted-foreground -translate-x-1/2" style={{ left: `${d.targetPercent}%` }}>Target</div>
               </div>
               <p className="text-xs text-muted-foreground">{d.whatThisMeans}</p>
             </div>
@@ -329,13 +348,7 @@ export default function HealthScore() {
 
       {/* Disclaimer */}
       <div className="text-center text-xs text-muted-foreground px-4 mb-8">
-        <p>Our analysis gives you a head start — it's built on real Indian tax law and SEBI guidelines. But for big decisions (selling property, starting a business, large investments), please confirm with a CA or SEBI-registered advisor. We tell you what to look into, they help you execute.</p>
-      </div>
-
-      {/* Navigation */}
-      <div className="grid grid-cols-2 gap-3">
-        <Button variant="hero" onClick={() => navigate("/tax")}>Optimize My Taxes →</Button>
-        <Button variant="hero-outline" onClick={() => navigate("/fire")}>Plan FIRE Journey →</Button>
+        <p>Our analysis gives you a head start — it's built on real Indian tax law and SEBI guidelines. But for big decisions, please confirm with a CA or SEBI-registered advisor.</p>
       </div>
 
       <MentorChat />

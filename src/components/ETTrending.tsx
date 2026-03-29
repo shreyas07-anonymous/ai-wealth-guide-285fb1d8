@@ -20,6 +20,8 @@ const fireArticles: ETArticle[] = [
   { chip: "Index fund SIP returns over 10 years", title: "₹10,000/Month SIP in Nifty 50: 10-Year Results", summary: "A ₹10,000/month SIP in a Nifty 50 index fund started in 2015 would be worth ₹28.5L today (invested: ₹12L). That's a 14.2% XIRR. Even through COVID crash, disciplined SIP investors came out ahead." },
 ];
 
+const ET_URL = "https://economictimes.indiatimes.com/?from=mdr";
+
 export function ETTrendingTax() {
   return <ETTrending articles={taxArticles} />;
 }
@@ -72,9 +74,14 @@ function ETTrending({ articles }: { articles: ETArticle[] }) {
               </div>
               <h3 className="font-display font-semibold mb-3">{selectedArticle.title}</h3>
               <p className="text-sm text-muted-foreground leading-relaxed mb-4">{selectedArticle.summary}</p>
-              <button className="flex items-center gap-1 text-sm text-[#E2621B] font-medium hover:underline">
-                Read full article on ET <ExternalLink className="w-3 h-3" />
-              </button>
+              <a
+                href={ET_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1 text-sm text-[#E2621B] font-medium hover:underline"
+              >
+                Read full article on ET ↗ <ExternalLink className="w-3 h-3" />
+              </a>
             </CardContent>
           </Card>
         </div>
