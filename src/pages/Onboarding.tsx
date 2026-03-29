@@ -4,15 +4,10 @@ import { useUserProfile, GoalWithTimeline, PortfolioItem } from "@/contexts/User
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
-import { ArrowRight, ArrowLeft, ChevronDown, ChevronUp } from "lucide-react";
+import { ArrowRight, ArrowLeft, ChevronDown, ChevronUp, Check, Minus, Plus } from "lucide-react";
+import NumberInput, { formatINR, parseShorthand } from "@/components/NumberInput";
 
 /* ───── helpers ───── */
-function formatINR(n: number) {
-  if (n >= 10000000) return `₹${(n / 10000000).toFixed(1)} Cr`;
-  if (n >= 100000) return `₹${(n / 100000).toFixed(1)} L`;
-  return `₹${Math.round(n).toLocaleString("en-IN")}`;
-}
-
 function ProgressBar({ current, total }: { current: number; total: number }) {
   return (
     <div className="mb-8">
@@ -33,6 +28,7 @@ function OptionCard({ selected, onClick, children, emoji }: { selected: boolean;
       <span className="text-sm font-medium flex items-center gap-2">
         {emoji && <span className="text-lg">{emoji}</span>}
         {children}
+        {selected && <Check className="w-4 h-4 text-primary ml-auto" />}
       </span>
     </button>
   );
@@ -50,6 +46,28 @@ function ChipSelect({ options, selected, onToggle, multi = false }: { options: {
           {opt.emoji && <span className="mr-1">{opt.emoji}</span>}{opt.label}
         </button>
       ))}
+    </div>
+  );
+}
+
+function SliderWithButtons({ value, onChange, min, max, label }: { value: number; onChange: (v: number) => void; min: number; max: number; label: string }) {
+  return (
+    <div>
+      <div className="flex justify-between text-sm mb-2">
+        <span className="text-muted-foreground">{label}</span>
+        <span className="font-display font-bold text-primary">{value}</span>
+      </div>
+      <div className="flex items-center gap-3">
+        <button onClick={() => onChange(Math.max(min, value - 1))}
+          className="w-9 h-9 rounded-full border-2 border-border/50 flex items-center justify-center text-muted-foreground font-bold text-lg hover:bg-secondary/50 active:bg-secondary transition" aria-label="Decrease">
+          <Minus className="w-4 h-4" />
+        </button>
+        <input type="range" min={min} max={max} value={value} onChange={(e) => onChange(parseInt(e.target.value))} className="flex-1 accent-primary" />
+        <button onClick={() => onChange(Math.min(max, value + 1))}
+          className="w-9 h-9 rounded-full border-2 border-border/50 flex items-center justify-center text-muted-foreground font-bold text-lg hover:bg-secondary/50 active:bg-secondary transition" aria-label="Increase">
+          <Plus className="w-4 h-4" />
+        </button>
+      </div>
     </div>
   );
 }
@@ -162,6 +180,22 @@ const mistakeChips = [
   "Spent too much, saved too little",
 ];
 
+const incomeChips = [
+  { label: "₹15K", value: 15000 }, { label: "₹25K", value: 25000 }, { label: "₹50K", value: 50000 },
+  { label: "₹75K", value: 75000 }, { label: "₹1L", value: 100000 }, { label: "₹1.5L", value: 150000 },
+  { label: "₹2L", value: 200000 }, { label: "₹3L", value: 300000 }, { label: "₹5L", value: 500000 },
+];
+
+const expenseChips = [
+  { label: "₹10K", value: 10000 }, { label: "₹20K", value: 20000 }, { label: "₹30K", value: 30000 },
+  { label: "₹50K", value: 50000 }, { label: "₹75K", value: 75000 }, { label: "₹1L", value: 100000 },
+];
+
+const emiChips = [
+  { label: "₹5K", value: 5000 }, { label: "₹10K", value: 10000 }, { label: "₹15K", value: 15000 },
+  { label: "₹25K", value: 25000 }, { label: "₹50K", value: 50000 },
+];
+
 /* ───── Main Component ───── */
 export default function Onboarding() {
   const navigate = useNavigate();
@@ -171,53 +205,70 @@ export default function Onboarding() {
   // State for all 15 questions
   const [firstName, setFirstName] = useState("");
   const [employment, setEmployment] = useState("");
-  const [age, setAge] = useState("");
-  const [income, setIncome] = useState("");
+  const [age, setAge] = useState(28);
+  const [income, setIncome] = useState(0);
   const [cityType, setCityType] = useState("");
-  const [expenses, setExpenses] = useState("");
+  const [expenses, setExpenses] = useState(0);
   const [showBreakdown, setShowBreakdown] = useState(false);
   const [breakdown, setBreakdown] = useState<Record<string, string>>({});
   const [hasLoans, setHasLoans] = useState<boolean | null>(null);
   const [selectedLoans, setSelectedLoans] = useState<string[]>([]);
-  const [totalEMI, setTotalEMI] = useState("");
+  const [totalEMI, setTotalEMI] = useState(0);
   const [safetyNets, setSafetyNets] = useState({
     emergencyMonths: "", termInsurance: "", termCoverage: "",
     healthInsurance: "", healthCoverage: "", epf: "", nps: "",
-    mutualFunds: "", sipAmount: "",
+    mutualFunds: "", sipAmount: 0,
   });
   const [behavior, setBehavior] = useState("");
-  const [deductions, setDeductions] = useState({ c80: "", d80: "", nps: "", hra: "", homeLoan: "" });
+  const [deductions, setDeductions] = useState({ c80: 0, d80: 0, nps: 0, hra: 0, homeLoan: 0 });
   const [deductionUnknowns, setDeductionUnknowns] = useState<string[]>([]);
   const [selectedWorries, setSelectedWorries] = useState<string[]>([]);
   const [selectedGoals, setSelectedGoals] = useState<GoalWithTimeline[]>([]);
-  const [retireAge, setRetireAge] = useState("55");
-  const [portfolioItems, setPortfolioItems] = useState<Record<string, string>>({});
+  const [retireAge, setRetireAge] = useState(55);
+  const [portfolioItems, setPortfolioItems] = useState<Record<string, number>>({});
   const [selectedPortfolio, setSelectedPortfolio] = useState<string[]>([]);
   const [mistake, setMistake] = useState("");
 
+  // Anomaly states
+  const [dismissedIncomeAnomaly, setDismissedIncomeAnomaly] = useState(false);
+  const [dismissedExpenseAnomaly, setDismissedExpenseAnomaly] = useState(false);
+
   const totalSteps = 15;
-  const numAge = parseInt(age) || 0;
-  const numIncome = parseFloat(income) || 0;
-  const numExpenses = parseFloat(expenses) || 0;
-  const savingsRate = numIncome > 0 ? Math.round(((numIncome - numExpenses) / numIncome) * 100) : 0;
+  const savingsRate = income > 0 ? Math.round(((income - expenses) / income) * 100) : 0;
+
+  // Income anomaly
+  const incomeAnnualLikely = income > 500000 && !dismissedIncomeAnomaly;
+  // Expense anomaly
+  const expenseAnomaly = income > 100000 && expenses > 0 && (expenses / income) < 0.10 && !dismissedExpenseAnomaly;
+  const expenseOverflow = expenses > income && income > 0;
+  // EMI anomaly
+  const emiOverIncome = totalEMI > 0 && income > 0 && totalEMI > income;
+  const emiHighRatio = totalEMI > 0 && income > 0 && (totalEMI / income) > 0.6;
+
+  // Goal validation
+  const goalsValid = selectedGoals.length > 0 && selectedGoals.every(g => {
+    const yr = parseInt(g.years);
+    const amt = parseFloat(g.amount);
+    return yr > 0 && amt > 0;
+  });
 
   const canNext = (): boolean => {
     switch (step) {
       case 0: return firstName.trim().length > 0;
       case 1: return employment !== "";
-      case 2: return numAge >= 16 && numAge <= 80;
-      case 3: return numIncome > 0;
+      case 2: return age >= 16 && age <= 85;
+      case 3: return income >= 10000;
       case 4: return cityType !== "";
-      case 5: return numExpenses > 0;
+      case 5: return expenses > 0;
       case 6: return hasLoans !== null;
-      case 7: return true; // safety nets are optional
+      case 7: return true;
       case 8: return behavior !== "";
-      case 9: return true; // deductions optional
+      case 9: return true;
       case 10: return selectedWorries.length > 0;
-      case 11: return selectedGoals.length > 0;
-      case 12: return parseInt(retireAge) > numAge;
-      case 13: return true; // portfolio optional
-      case 14: return true; // mistake optional
+      case 11: return goalsValid;
+      case 12: return retireAge > age;
+      case 13: return true;
+      case 14: return true;
       default: return true;
     }
   };
@@ -231,33 +282,33 @@ export default function Onboarding() {
     updateProfile({
       firstName: firstName.trim(),
       employmentType: employment,
-      age: numAge,
-      monthlyIncome: numIncome,
+      age,
+      monthlyIncome: income,
       cityType,
-      monthlyExpenses: numExpenses,
+      monthlyExpenses: expenses,
       expenseBreakdown: expBreakdown,
-      loans: { types: selectedLoans, totalEMI: parseFloat(totalEMI) || 0 },
+      loans: { types: selectedLoans, totalEMI },
       safetyNets: {
         ...safetyNets,
-        sipAmount: parseFloat(safetyNets.sipAmount) || 0,
+        sipAmount: safetyNets.sipAmount || 0,
       },
       currentBehavior: behavior,
       deductions: {
-        c80: parseFloat(deductions.c80) || 0,
-        d80: parseFloat(deductions.d80) || 0,
-        nps: parseFloat(deductions.nps) || 0,
-        hra: parseFloat(deductions.hra) || 0,
-        homeLoanInterest: parseFloat(deductions.homeLoan) || 0,
+        c80: deductions.c80,
+        d80: deductions.d80,
+        nps: deductions.nps,
+        hra: deductions.hra,
+        homeLoanInterest: deductions.homeLoan,
         unknowns: deductionUnknowns,
       },
       worries: selectedWorries,
       goals: selectedGoals,
-      retirementAge: parseInt(retireAge) || 55,
+      retirementAge: retireAge,
       portfolio: selectedPortfolio.map((id) => ({
         id,
         label: portfolioTypes.find((p) => p.id === id)?.label || id,
         emoji: portfolioTypes.find((p) => p.id === id)?.emoji || "",
-        amount: parseFloat(portfolioItems[id] || "0"),
+        amount: portfolioItems[id] || 0,
       })),
       biggestMistake: mistake,
     });
@@ -291,6 +342,29 @@ export default function Onboarding() {
       prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id]
     );
   };
+
+  const dedChips80c = [
+    { label: "₹0", value: 0 }, { label: "₹50K", value: 50000 }, { label: "₹1L", value: 100000 }, { label: "₹1.5L Max", value: 150000 },
+  ];
+  const dedChipsNps = [
+    { label: "₹0", value: 0 }, { label: "₹25K", value: 25000 }, { label: "₹50K Max", value: 50000 },
+  ];
+  const dedChips80d = [
+    { label: "₹0", value: 0 }, { label: "₹10K", value: 10000 }, { label: "₹25K", value: 25000 }, { label: "₹50K", value: 50000 },
+  ];
+  const dedChipsHomeLoan = [
+    { label: "₹0", value: 0 }, { label: "₹1L", value: 100000 }, { label: "₹1.5L", value: 150000 }, { label: "₹2L Max", value: 200000 },
+  ];
+
+  const sipChips = [
+    { label: "₹1K", value: 1000 }, { label: "₹3K", value: 3000 }, { label: "₹5K", value: 5000 },
+    { label: "₹10K", value: 10000 }, { label: "₹25K", value: 25000 },
+  ];
+
+  const goalYearChips = [
+    { label: "3 yrs", value: 3 }, { label: "5 yrs", value: 5 }, { label: "10 yrs", value: 10 },
+    { label: "15 yrs", value: 15 }, { label: "20+ yrs", value: 20 },
+  ];
 
   const renderStep = () => {
     switch (step) {
@@ -338,10 +412,10 @@ export default function Onboarding() {
               <h2 className="font-display text-2xl font-bold mb-2">How old are you?</h2>
               <p className="text-muted-foreground">Age changes everything — from risk appetite to tax rules.</p>
             </div>
-            <Input type="number" placeholder="e.g. 28" value={age} onChange={(e) => setAge(e.target.value)} className="text-lg py-6 bg-secondary/50 border-border/50" />
-            {numAge > 0 && numAge >= 16 && (
+            <SliderWithButtons value={age} onChange={setAge} min={16} max={80} label="Your age" />
+            {age >= 16 && (
               <Card className="bg-primary/5 border-primary/20">
-                <CardContent className="p-4 text-sm text-foreground">{ageMessages[getAgeRange(numAge)]}</CardContent>
+                <CardContent className="p-4 text-sm text-foreground">{ageMessages[getAgeRange(age)]}</CardContent>
               </Card>
             )}
           </div>
@@ -355,14 +429,37 @@ export default function Onboarding() {
               <h2 className="font-display text-2xl font-bold mb-2">How much hits your bank account every month?</h2>
               <p className="text-muted-foreground">After all cuts — salary after TDS, PF, etc. Not sure? Check your last salary credit SMS.</p>
             </div>
-            <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">₹</span>
-              <Input type="number" placeholder="e.g. 50000" value={income} onChange={(e) => setIncome(e.target.value)} className="text-lg py-6 pl-8 bg-secondary/50 border-border/50" />
-            </div>
-            {numIncome > 0 && (
+            <NumberInput
+              value={income}
+              onChange={setIncome}
+              quickOptions={incomeChips}
+              min={1000}
+              max={50000000}
+            />
+            {/* Annual income anomaly */}
+            {incomeAnnualLikely && (
+              <Card className="bg-score-fair/5 border-score-fair/30">
+                <CardContent className="p-3 text-sm">
+                  <p>Did you mean <strong>{formatINR(Math.round(income / 12))}/month</strong>? That would be {formatINR(income)} per year.</p>
+                  <div className="flex gap-2 mt-2">
+                    <button onClick={() => setDismissedIncomeAnomaly(true)} className="px-3 py-1 rounded-lg border border-border/50 text-xs hover:bg-secondary/50">Yes, it's monthly</button>
+                    <button onClick={() => { setIncome(Math.round(income / 12)); setDismissedIncomeAnomaly(true); }} className="px-3 py-1 rounded-lg border border-primary/30 text-xs text-primary hover:bg-primary/10">Convert to monthly</button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+            {income >= 10000 && (
               <Card className="bg-primary/5 border-primary/20">
                 <CardContent className="p-4 text-sm">
-                  <span className="text-foreground">This puts you in the <span className="font-semibold text-primary">{formatINR(numIncome * 12)}/year</span> income group. </span>
+                  <span className="text-foreground">This puts you in the <span className="font-semibold text-primary">{formatINR(income * 12)}/year</span> income group.</span>
+                </CardContent>
+              </Card>
+            )}
+            {income > 0 && income < 10000 && (
+              <Card className="bg-score-fair/5 border-score-fair/30">
+                <CardContent className="p-3 text-sm text-score-fair">
+                  <p className="font-semibold">Looks like you might have missed this!</p>
+                  <p className="mt-1">Please enter your monthly take-home pay to get accurate results. Not sure? Check your last bank credit SMS — it usually says the amount credited.</p>
                 </CardContent>
               </Card>
             )}
@@ -393,10 +490,12 @@ export default function Onboarding() {
               <h2 className="font-display text-2xl font-bold mb-2">Roughly how much do you spend every month?</h2>
               <p className="text-muted-foreground">Include rent, food, transport, bills — everything.</p>
             </div>
-            <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">₹</span>
-              <Input type="number" placeholder="e.g. 30000" value={expenses} onChange={(e) => setExpenses(e.target.value)} className="text-lg py-6 pl-8 bg-secondary/50 border-border/50" />
-            </div>
+            <NumberInput
+              value={expenses}
+              onChange={setExpenses}
+              quickOptions={expenseChips}
+              min={500}
+            />
 
             <button onClick={() => setShowBreakdown(!showBreakdown)} className="flex items-center gap-1 text-sm text-primary hover:text-primary/80 transition-colors">
               {showBreakdown ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
@@ -408,21 +507,41 @@ export default function Onboarding() {
                 {expenseCategories.map((cat) => (
                   <div key={cat.id} className="flex items-center gap-3">
                     <span className="text-sm w-40 shrink-0">{cat.emoji} {cat.label}</span>
-                    <Input type="number" placeholder="₹" value={breakdown[cat.id] || ""} onChange={(e) => {
+                    <Input type="text" inputMode="numeric" placeholder="₹" value={breakdown[cat.id] || ""} onChange={(e) => {
                       const newB = { ...breakdown, [cat.id]: e.target.value };
                       setBreakdown(newB);
                       const total = Object.values(newB).reduce((sum, v) => sum + (parseFloat(v) || 0), 0);
-                      if (total > 0) setExpenses(String(total));
+                      if (total > 0) setExpenses(total);
                     }} className="bg-secondary/50 border-border/50" />
                   </div>
                 ))}
               </div>
             )}
 
-            {numIncome > 0 && numExpenses > 0 && (
+            {/* Expense anomaly */}
+            {expenseAnomaly && (
+              <Card className="bg-score-fair/5 border-score-fair/30">
+                <CardContent className="p-3 text-sm">
+                  <p>⚠️ You're earning {formatINR(income)}/month but spending only {formatINR(expenses)}? That's a {Math.round((1 - expenses/income) * 100)}% savings rate. Is this correct?</p>
+                  <div className="flex gap-2 mt-2">
+                    <button onClick={() => setDismissedExpenseAnomaly(true)} className="px-3 py-1 rounded-lg border border-border/50 text-xs hover:bg-secondary/50">Yes, that's correct</button>
+                    <button onClick={() => { setExpenses(0); setDismissedExpenseAnomaly(true); }} className="px-3 py-1 rounded-lg border border-primary/30 text-xs text-primary hover:bg-primary/10">Let me fix it</button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+            {expenseOverflow && (
+              <Card className="bg-score-critical/5 border-score-critical/30">
+                <CardContent className="p-3 text-xs text-score-critical">
+                  🚨 Your expenses ({formatINR(expenses)}) exceed your income ({formatINR(income)}). Please double-check.
+                </CardContent>
+              </Card>
+            )}
+
+            {income > 0 && expenses > 0 && !expenseOverflow && (
               <Card className={`border ${savingsRate >= 30 ? "border-score-excellent/30 bg-score-excellent/5" : savingsRate >= 20 ? "border-score-good/30 bg-score-good/5" : savingsRate >= 10 ? "border-score-fair/30 bg-score-fair/5" : "border-score-critical/30 bg-score-critical/5"}`}>
                 <CardContent className="p-4 text-sm">
-                  You save about <span className="font-semibold">{formatINR(numIncome - numExpenses)}/month</span>. That's <span className={`font-bold ${savingsRate >= 30 ? "text-score-excellent" : savingsRate >= 20 ? "text-score-good" : savingsRate >= 10 ? "text-score-fair" : "text-score-critical"}`}>{savingsRate}%</span> of your income.
+                  You save about <span className="font-semibold">{formatINR(income - expenses)}/month</span>. That's <span className={`font-bold ${savingsRate >= 30 ? "text-score-excellent" : savingsRate >= 20 ? "text-score-good" : savingsRate >= 10 ? "text-score-fair" : "text-score-critical"}`}>{savingsRate}%</span> of your income.
                   {savingsRate >= 30 && " ⭐ Excellent!"}
                   {savingsRate >= 20 && savingsRate < 30 && " 👍 Good!"}
                   {savingsRate >= 10 && savingsRate < 20 && " ⚠️ Room to improve."}
@@ -455,11 +574,18 @@ export default function Onboarding() {
                   multi
                 />
                 <div>
-                  <p className="text-sm text-muted-foreground mb-2">Total monthly EMI for all loans?</p>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">₹</span>
-                    <Input type="number" placeholder="e.g. 15000" value={totalEMI} onChange={(e) => setTotalEMI(e.target.value)} className="pl-8 bg-secondary/50 border-border/50" />
-                  </div>
+                  <NumberInput
+                    label="Total monthly EMI for all loans"
+                    value={totalEMI}
+                    onChange={setTotalEMI}
+                    quickOptions={emiChips}
+                  />
+                  {emiOverIncome && (
+                    <p className="text-xs text-score-critical mt-1">🚨 Your EMI ({formatINR(totalEMI)}) exceeds your income ({formatINR(income)}). Please double-check.</p>
+                  )}
+                  {emiHighRatio && !emiOverIncome && (
+                    <p className="text-xs text-score-fair mt-1">⚠️ High EMI load detected — your debt analysis will flag this.</p>
+                  )}
                 </div>
               </div>
             )}
@@ -559,11 +685,13 @@ export default function Onboarding() {
                       ))}
                     </div>
                     {safetyNets[key] === "Yes" && key === "mutualFunds" && (
-                      <div className="mt-2 relative">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-xs">₹/month</span>
-                        <Input type="number" placeholder="SIP amount" value={safetyNets.sipAmount}
-                          onChange={(e) => setSafetyNets((p) => ({ ...p, sipAmount: e.target.value }))}
-                          className="pl-20 bg-secondary/50 border-border/50 text-sm" />
+                      <div className="mt-2">
+                        <NumberInput
+                          label="Monthly SIP amount"
+                          value={safetyNets.sipAmount}
+                          onChange={(v) => setSafetyNets((p) => ({ ...p, sipAmount: v }))}
+                          quickOptions={sipChips}
+                        />
                       </div>
                     )}
                   </div>
@@ -605,15 +733,14 @@ export default function Onboarding() {
             </div>
 
             {[
-              { key: "c80", label: "80C Investments", max: "₹1,50,000", tooltip: "EPF, PPF, ELSS mutual funds, LIC premium, children's tuition, 5-year FD, home loan principal — any combo up to ₹1.5 lakh" },
-              { key: "nps", label: "NPS Extra (80CCD1B)", max: "₹50,000", tooltip: "If you put money into NPS, you get an EXTRA ₹50,000 deduction OVER the ₹1.5L limit above. Most people miss this!" },
-              { key: "d80", label: "Health Insurance (80D)", max: "₹75,000", tooltip: "Your health insurance premium — you pay ₹X/year, government lets you deduct it" },
-              { key: "hra", label: "HRA (Rent benefit)", max: "varies", tooltip: "If you pay rent and get HRA in salary, a portion is tax-deductible" },
-              { key: "homeLoan", label: "Home Loan Interest", max: "₹2,00,000", tooltip: "The interest part of your home loan EMI is deductible up to ₹2 lakh/year" },
-            ].map(({ key, label, max, tooltip }) => (
+              { key: "c80" as const, label: "80C Investments", tooltip: "EPF, PPF, ELSS mutual funds, LIC premium, children's tuition, 5-year FD, home loan principal — any combo up to ₹1.5 lakh", chips: dedChips80c },
+              { key: "nps" as const, label: "NPS Extra (80CCD1B)", tooltip: "If you put money into NPS, you get an EXTRA ₹50,000 deduction OVER the ₹1.5L limit above. Most people miss this!", chips: dedChipsNps },
+              { key: "d80" as const, label: "Health Insurance (80D)", tooltip: "Your health insurance premium — you pay ₹X/year, government lets you deduct it", chips: dedChips80d },
+              { key: "homeLoan" as const, label: "Home Loan Interest", tooltip: "The interest part of your home loan EMI is deductible up to ₹2 lakh/year", chips: dedChipsHomeLoan },
+            ].map(({ key, label, tooltip, chips }) => (
               <div key={key} className="space-y-1">
                 <div className="flex items-center justify-between">
-                  <label className="text-sm font-medium">{label} <span className="text-muted-foreground font-normal">(max {max})</span></label>
+                  <label className="text-sm font-medium">{label}</label>
                   <button onClick={() => setDeductionUnknowns((p) => p.includes(key) ? p.filter((d) => d !== key) : [...p, key])}
                     className={`text-xs px-2 py-1 rounded-full border ${deductionUnknowns.includes(key) ? "border-primary bg-primary/15 text-primary" : "border-border/50 text-muted-foreground"}`}>
                     I have no idea
@@ -621,13 +748,11 @@ export default function Onboarding() {
                 </div>
                 <p className="text-xs text-muted-foreground mb-1">ℹ️ {tooltip}</p>
                 {!deductionUnknowns.includes(key) && (
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">₹</span>
-                    <Input type="number" placeholder="0"
-                      value={deductions[key as keyof typeof deductions]}
-                      onChange={(e) => setDeductions((p) => ({ ...p, [key]: e.target.value }))}
-                      className="pl-8 bg-secondary/50 border-border/50" />
-                  </div>
+                  <NumberInput
+                    value={deductions[key]}
+                    onChange={(v) => setDeductions((p) => ({ ...p, [key]: v }))}
+                    quickOptions={chips}
+                  />
                 )}
               </div>
             ))}
@@ -655,41 +780,78 @@ export default function Onboarding() {
           </div>
         );
 
-      /* Q12 — Goals */
+      /* Q12 — Goals (MULTI-SELECT WITH DYNAMIC INPUTS) */
       case 11:
         return (
           <div className="space-y-6">
             <div>
               <h2 className="font-display text-2xl font-bold mb-2">What are you saving for, {firstName}?</h2>
-              <p className="text-muted-foreground">Select your goals. You can add timelines and amounts after.</p>
+              <p className="text-muted-foreground">Select all goals that apply. Add timeline and cost for each.</p>
             </div>
             <div className="space-y-2">
               {goalOptions.map((opt) => {
                 const isSelected = selectedGoals.find((g) => g.id === opt.id);
                 return (
-                  <div key={opt.id}>
-                    <OptionCard selected={!!isSelected} onClick={() => toggleGoal(opt.id)} emoji={opt.emoji}>
-                      {opt.label}
-                    </OptionCard>
-                    {isSelected && (
-                      <div className="flex gap-2 mt-2 ml-8 mb-2">
-                        <select value={isSelected.years} onChange={(e) => updateGoal(opt.id, "years", e.target.value)}
-                          className="bg-secondary/50 border border-border/50 rounded-lg px-3 py-2 text-sm text-foreground">
-                          <option value="">When?</option>
-                          <option value="5">5 years</option>
-                          <option value="10">10 years</option>
-                          <option value="15">15 years</option>
-                          <option value="20">20+ years</option>
-                        </select>
-                        <Input type="number" placeholder="How much? (optional)" value={isSelected.amount}
-                          onChange={(e) => updateGoal(opt.id, "amount", e.target.value)}
-                          className="bg-secondary/50 border-border/50 text-sm" />
-                      </div>
-                    )}
-                  </div>
+                  <OptionCard key={opt.id} selected={!!isSelected} onClick={() => toggleGoal(opt.id)} emoji={opt.emoji}>
+                    {opt.label}
+                  </OptionCard>
                 );
               })}
             </div>
+
+            {/* Dynamic input cards for each selected goal */}
+            {selectedGoals.length > 0 && (
+              <div className="space-y-4">
+                <h3 className="text-sm font-semibold text-foreground">Tell us more about each goal</h3>
+                {selectedGoals.map((goal) => (
+                  <Card key={goal.id} className="bg-card border-border/50 animate-fade-in">
+                    <CardContent className="p-4 space-y-3">
+                      <p className="text-sm font-medium flex items-center gap-2">
+                        <span>{goal.emoji}</span> {goal.label}
+                      </p>
+                      <div>
+                        <label className="text-xs text-muted-foreground mb-1 block">When do you want this by?</label>
+                        <div className="flex flex-wrap gap-2">
+                          {goalYearChips.map((yc) => (
+                            <button key={yc.value} onClick={() => updateGoal(goal.id, "years", String(yc.value))}
+                              className={`px-3 py-1.5 text-xs rounded-full border transition-all ${goal.years === String(yc.value) ? "border-primary bg-primary/15 text-primary" : "border-border/50 text-muted-foreground hover:border-primary/30"}`}>
+                              {yc.label}
+                            </button>
+                          ))}
+                        </div>
+                        {!goal.years && <p className="text-xs text-score-critical mt-1">Please select a target timeline</p>}
+                      </div>
+                      <div>
+                        <label className="text-xs text-muted-foreground mb-1 block">How much will it cost? (approximate)</label>
+                        <div className="relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">₹</span>
+                          <Input
+                            type="text" inputMode="numeric"
+                            placeholder="e.g. 2500000 or 25L"
+                            value={goal.amount}
+                            onChange={(e) => {
+                              const raw = e.target.value.replace(/[^0-9.,kKlLcCrRoOeEaAhH ]/g, "");
+                              updateGoal(goal.id, "amount", raw);
+                            }}
+                            onBlur={() => {
+                              if (goal.amount) {
+                                const parsed = parseShorthand(goal.amount);
+                                if (parsed > 0) updateGoal(goal.id, "amount", String(parsed));
+                              }
+                            }}
+                            className="pl-8 bg-secondary/50 border-border/50 text-sm"
+                          />
+                        </div>
+                        {goal.amount && parseFloat(goal.amount) > 0 && (
+                          <p className="text-xs text-primary mt-1 font-medium">= {formatINR(parseFloat(goal.amount))}</p>
+                        )}
+                        {!goal.amount && <p className="text-xs text-score-critical mt-1">Please enter an estimated cost</p>}
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
           </div>
         );
 
@@ -701,13 +863,10 @@ export default function Onboarding() {
               <h2 className="font-display text-2xl font-bold mb-2">At what age do you want to stop depending on a salary?</h2>
               <p className="text-muted-foreground">This doesn't mean you'll stop working — just that you won't HAVE to.</p>
             </div>
-            <Input type="number" placeholder="e.g. 50" value={retireAge} onChange={(e) => setRetireAge(e.target.value)} className="text-lg py-6 bg-secondary/50 border-border/50" />
-            <input type="range" min={numAge + 5 || 35} max={70} value={parseInt(retireAge) || 55}
-              onChange={(e) => setRetireAge(e.target.value)}
-              className="w-full accent-primary" />
-            {parseInt(retireAge) > numAge && (
+            <SliderWithButtons value={retireAge} onChange={setRetireAge} min={Math.max(age + 5, 35)} max={70} label="Target freedom age" />
+            {retireAge > age && (
               <Card className="bg-primary/5 border-primary/20">
-                <CardContent className="p-4 text-sm">That's <span className="font-bold text-primary">{parseInt(retireAge) - numAge} years</span> from now. Let's make it count.</CardContent>
+                <CardContent className="p-4 text-sm">That's <span className="font-bold text-primary">{retireAge - age} years</span> from now. Let's make it count.</CardContent>
               </Card>
             )}
           </div>
@@ -730,12 +889,15 @@ export default function Onboarding() {
                       {p.label}
                     </OptionCard>
                     {isSelected && (
-                      <div className="ml-8 mt-2 mb-2 relative">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">₹</span>
-                        <Input type="number" placeholder="Approximate value"
-                          value={portfolioItems[p.id] || ""}
-                          onChange={(e) => setPortfolioItems((prev) => ({ ...prev, [p.id]: e.target.value }))}
-                          className="pl-8 bg-secondary/50 border-border/50 text-sm" />
+                      <div className="ml-8 mt-2 mb-2">
+                        <NumberInput
+                          value={portfolioItems[p.id] || 0}
+                          onChange={(v) => setPortfolioItems((prev) => ({ ...prev, [p.id]: v }))}
+                          quickOptions={[
+                            { label: "₹50K", value: 50000 }, { label: "₹1L", value: 100000 },
+                            { label: "₹5L", value: 500000 }, { label: "₹10L", value: 1000000 },
+                          ]}
+                        />
                       </div>
                     )}
                   </div>

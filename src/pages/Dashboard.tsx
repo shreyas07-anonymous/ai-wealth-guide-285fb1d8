@@ -1,13 +1,8 @@
 import { Link } from "react-router-dom";
 import { useUserProfile } from "@/contexts/UserProfileContext";
 import { Card, CardContent } from "@/components/ui/card";
-import { Calculator, Flame, Heart, MessageCircle, TrendingUp, Shield, ExternalLink } from "lucide-react";
-
-function formatINR(n: number) {
-  if (n >= 10000000) return `₹${(n / 10000000).toFixed(1)} Cr`;
-  if (n >= 100000) return `₹${(n / 100000).toFixed(1)} L`;
-  return `₹${Math.round(n).toLocaleString("en-IN")}`;
-}
+import { Calculator, Flame, Heart, TrendingUp, Shield, ExternalLink } from "lucide-react";
+import { formatINR } from "@/components/NumberInput";
 
 function getGrade(score: number) {
   if (score >= 85) return "A";
@@ -17,53 +12,30 @@ function getGrade(score: number) {
   return "F";
 }
 
+const ET_URL = "https://economictimes.indiatimes.com/?from=mdr";
+
 function getETNews(profile: ReturnType<typeof useUserProfile>["profile"]) {
   const news: { headline: string; impact: string; impactColor: string; tag: string }[] = [];
 
   if (profile.loans.types.includes("home")) {
-    news.push({
-      headline: "RBI holds Repo Rate at 6.5% — Your home loan EMI stays unchanged for now.",
-      impact: "Your EMI won't change this quarter",
-      impactColor: "text-score-excellent",
-      tag: "2 hours ago",
-    });
+    news.push({ headline: "RBI holds Repo Rate at 6.5% — Your home loan EMI stays unchanged for now.", impact: "Your EMI won't change this quarter", impactColor: "text-score-excellent", tag: "2 hours ago" });
   }
 
   const annual = profile.monthlyIncome * 12;
   if (annual > 1500000) {
-    news.push({
-      headline: "Budget 2025: Section 80C limit likely to be raised to ₹2L — Here's how it would affect you.",
-      impact: `Could save you additional ${formatINR(50000 * 0.3)}/year in tax`,
-      impactColor: "text-score-excellent",
-      tag: "5 hours ago",
-    });
+    news.push({ headline: "Budget 2025: Section 80C limit likely to be raised to ₹2L — Here's how it would affect you.", impact: `Could save you additional ${formatINR(50000 * 0.3)}/year in tax`, impactColor: "text-score-excellent", tag: "5 hours ago" });
   }
 
   if (profile.safetyNets.mutualFunds === "Yes") {
-    news.push({
-      headline: "Nifty hits new all-time high — LTCG harvesting window open. Your portfolio may benefit.",
-      impact: "Consider booking ₹1L in long-term gains tax-free",
-      impactColor: "text-primary",
-      tag: "1 day ago",
-    });
+    news.push({ headline: "Nifty hits new all-time high — LTCG harvesting window open.", impact: "Consider booking ₹1L in long-term gains tax-free", impactColor: "text-primary", tag: "1 day ago" });
   }
 
   if (profile.goals.some((g) => g.id === "home")) {
-    news.push({
-      headline: "Home loan rates expected to drop by Q2 — Lock in now or wait? ET analysis.",
-      impact: "Waiting could save ₹2-5L over loan tenure",
-      impactColor: "text-score-good",
-      tag: "3 hours ago",
-    });
+    news.push({ headline: "Home loan rates expected to drop by Q2 — Lock in now or wait?", impact: "Waiting could save ₹2-5L over loan tenure", impactColor: "text-score-good", tag: "3 hours ago" });
   }
 
   if (news.length < 3) {
-    news.push({
-      headline: "NPS subscribers cross 7 Cr — why the extra ₹50K deduction is India's best-kept tax secret.",
-      impact: "You could save ₹15,600/year with NPS",
-      impactColor: "text-primary",
-      tag: "6 hours ago",
-    });
+    news.push({ headline: "NPS subscribers cross 7 Cr — why the extra ₹50K deduction is India's best-kept tax secret.", impact: "You could save ₹15,600/year with NPS", impactColor: "text-primary", tag: "6 hours ago" });
   }
 
   return news.slice(0, 3);
@@ -74,7 +46,6 @@ export default function Dashboard() {
   const name = profile.firstName || "Friend";
   const etNews = getETNews(profile);
 
-  // Quick score calculation (simplified)
   const savingsRate = profile.monthlyIncome > 0 ? Math.round(((profile.monthlyIncome - profile.monthlyExpenses) / profile.monthlyIncome) * 100) : 0;
   const quickScore = Math.min(100, Math.max(0, Math.round(savingsRate * 1.5 + 20)));
 
@@ -87,7 +58,6 @@ export default function Dashboard() {
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-3xl">
-      {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="font-display text-2xl font-bold">Welcome, {name}! 👋</h1>
@@ -99,7 +69,6 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Quick Stats */}
       <div className="grid grid-cols-4 gap-3 mb-6">
         <Card className="bg-gradient-card border-border/50">
           <CardContent className="p-3 text-center">
@@ -137,25 +106,27 @@ export default function Dashboard() {
         </div>
         <div className="space-y-3">
           {etNews.map((news, i) => (
-            <Card key={i} className="bg-gradient-card border-border/50 hover:border-[#E2621B]/30 transition-colors cursor-pointer">
-              <CardContent className="p-4">
-                <div className="flex items-start gap-3">
-                  <div className="w-6 h-6 rounded bg-[#E2621B]/10 flex items-center justify-center shrink-0 mt-0.5">
-                    <span className="text-[#E2621B] text-xs font-bold">ET</span>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-foreground leading-snug">{news.headline}</p>
-                    <p className={`text-xs ${news.impactColor} mt-1 font-medium`}>{news.impact}</p>
-                    <div className="flex items-center justify-between mt-2">
-                      <span className="text-xs text-muted-foreground">{news.tag}</span>
-                      <span className="text-xs text-[#E2621B] flex items-center gap-1">
-                        Read on ET <ExternalLink className="w-3 h-3" />
-                      </span>
+            <a key={i} href={ET_URL} target="_blank" rel="noopener noreferrer">
+              <Card className="bg-gradient-card border-border/50 hover:border-[#E2621B]/30 transition-colors cursor-pointer mb-3">
+                <CardContent className="p-4">
+                  <div className="flex items-start gap-3">
+                    <div className="w-6 h-6 rounded bg-[#E2621B]/10 flex items-center justify-center shrink-0 mt-0.5">
+                      <span className="text-[#E2621B] text-xs font-bold">ET</span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-foreground leading-snug">{news.headline}</p>
+                      <p className={`text-xs ${news.impactColor} mt-1 font-medium`}>{news.impact}</p>
+                      <div className="flex items-center justify-between mt-2">
+                        <span className="text-xs text-muted-foreground">{news.tag}</span>
+                        <span className="text-xs text-[#E2621B] flex items-center gap-1">
+                          Read on ET <ExternalLink className="w-3 h-3" />
+                        </span>
+                      </div>
                     </div>
                   </div>
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
+            </a>
           ))}
         </div>
         <p className="text-xs text-muted-foreground mt-2 text-center">Powered by ET Intelligence</p>
@@ -178,7 +149,6 @@ export default function Dashboard() {
         ))}
       </div>
 
-      {/* Disclaimer */}
       <Card className="bg-secondary/30 border-border/50">
         <CardContent className="p-4 text-center">
           <p className="text-xs text-muted-foreground">
