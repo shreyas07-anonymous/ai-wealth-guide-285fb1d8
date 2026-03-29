@@ -47,8 +47,8 @@ export default function HealthScore() {
   const navigate = useNavigate();
   const name = profile.firstName || "Friend";
 
-  // Zero-state: if income < 10000, show gentle prompt
-  if (profile.monthlyIncome < 10000) {
+  const dimensions = useMemo(() => {
+    if (profile.monthlyIncome < 10000) return [];
     return (
       <div className="container mx-auto px-4 py-8 max-w-2xl">
         <div className="flex items-center gap-2 mb-4 text-sm text-muted-foreground">
